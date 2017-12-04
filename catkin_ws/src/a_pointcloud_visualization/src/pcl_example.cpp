@@ -13,11 +13,11 @@ ros::Publisher point_orig;
 ros::Publisher pointcloud2_publisher;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
-const float theta = 30.0;
+const float theta = -30.0;
 const float dx = 0.0;
-const float dy = 0.01;
+const float dy = -0.5;
 const float dz = 0.0;
-const float t_ =theta*M_PI/180.0;
+const float t_ = theta*M_PI/180.0;
 
 void  cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
 {
@@ -47,10 +47,21 @@ void  cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
   tt.is_dense = cloud_rgb.is_dense;
   tt.points.resize(tt.width * tt.height);*/
   for (size_t i = 0; i < cloud_rgb.points.size(); i++){
+    /*tt.points[i].x = cloud_rgb.points[i].x;
+    tt.points[i].y = cloud_rgb.points[i].y;
+    tt.points[i].z = cloud_rgb.points[i].z;*/
     tt.points[i].x = cloud_rgb.points[i].x + dx*1;
     tt.points[i].y = cos(t_)*cloud_rgb.points[i].y - sin(t_)*cloud_rgb.points[i].z + dy*1;
     tt.points[i].z = sin(t_)*cloud_rgb.points[i].y + cos(t_)*cloud_rgb.points[i].z + dz*1;
+    /*tt.points[i].y = -( cos(t_)*cloud_rgb.points[i].x + sin(t_)*cloud_rgb.points[i].z + dx*1 );
+    tt.points[i].z = -( cloud_rgb.points[i].y + dy*1 );
+    tt.points[i].x = -sin(t_)*cloud_rgb.points[i].x + cos(t_)*cloud_rgb.points[i].z + dz*1;*/
     tt.points[i].rgb = cloud_rgb.points[i].rgb;
+    if (tt.points[i].y > 0){
+      tt.points[i].r = 255;
+      tt.points[i].g = 0;
+      tt.points[i].b = 0;
+    }
   }
   // end
   pcl::toROSMsg(cloud, pcl_to_ros_pointcloud2);//convert back to PointCloud2
