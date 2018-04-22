@@ -21,18 +21,13 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+#find_package(PCL 1.2 REQUIRED)
 
-project(planar_segmentation)
+#include_directories(${PCL_INCLUDE_DIRS})
+#link_directories(${PCL_LIBRARY_DIRS})
+#add_definitions(${PCL_DEFINITIONS})
 
-find_package(PCL 1.2 REQUIRED)
 
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
-
-add_executable (planar_segmentation src/planar_segmentation.cpp)
-target_link_libraries (planar_segmentation ${catkin_LIBRARIES})
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -213,3 +208,13 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+
+add_executable (planar_segmentation_old src/planar_segmentation_old.cpp)
+target_link_libraries (planar_segmentation_old ${catkin_LIBRARIES})
+add_executable (planar_segmentation src/planar_segmentation.cpp)
+target_link_libraries (planar_segmentation ${catkin_LIBRARIES})
+add_executable (extract_indices src/extract_indices.cpp)
+target_link_libraries (extract_indices ${catkin_LIBRARIES})
+add_executable (cluster_extraction src/cluster_extraction.cpp)
+target_link_libraries (cluster_extraction ${catkin_LIBRARIES})
