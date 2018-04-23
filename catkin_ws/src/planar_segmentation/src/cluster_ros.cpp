@@ -92,6 +92,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
   ec.extract (cluster_indices);
 
   int j = 0;
+  int a = 0;
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -104,7 +105,13 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
     std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size () << " data points." << std::endl;
     std::stringstream ss;
     ss << "cloud_cluster_" << j << ".pcd";
+    
+    for (size_t i = 0; i < cloud_cluster->points.size(); i++){
+      cloud_cluster->points[i].r = 255 - a;
+      cloud_cluster->points[i].g = 0 + a;
+    }
     writer.write<pcl::PointXYZRGB> (ss.str (), *cloud_cluster, false); //*
+    a+=30;
     j++;
   }
 }
@@ -116,11 +123,11 @@ int main (int argc, char** argv)
      ros::NodeHandle nh;
      //cluster();
      // Create a ROS subscriber for the input point cloud
-     ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/velodyne_points", 1, cloud_cb);
+     ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/cloud_pcd", 1, cloud_cb);
      // Create a ROS publisher for the output point cloud
      //pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 1); 
      //pointcloudXYZ = nh.advertise<PointCloudXYZ> ("ros_pointcloudxyz", 1);
      //pointcloud2_publisher = nh.advertise<sensor_msgs::PointCloud2> ("pcltoros_pointcloud2", 1);
      // Spin
-     //ros::spin ();
+     ros::spin ();
   }
