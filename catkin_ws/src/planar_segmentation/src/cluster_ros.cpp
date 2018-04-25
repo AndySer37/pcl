@@ -24,7 +24,11 @@ PointCloudXYZRGB::Ptr cloud_in (new PointCloudXYZRGB);
 PointCloudXYZRGB::Ptr cloud_filtered (new PointCloudXYZRGB);
 PointCloudXYZRGB::Ptr cloud_f (new PointCloudXYZRGB);
 PointCloudXYZRGB::Ptr cloud_plane (new PointCloudXYZRGB);
+PointCloudXYZRGB::Ptr result (new PointCloudXYZRGB);
+sensor_msgs::PointCloud2 ros_out;
+
 ros::Publisher pub_XYZRGB;
+ros::Publisher pointcloud2_publisher;
 bool lock = false;
 void cluster_pointcloud(void);
 
@@ -74,7 +78,7 @@ void cluster_pointcloud()
   // Create the filtering object: downsample the dataset using a leaf size of 1cm
   pcl::VoxelGrid<pcl::PointXYZRGB> vg;
   vg.setInputCloud (cloud_in);
-  vg.setLeafSize (0.01f, 0.01f, 0.01f);
+  vg.setLeafSize (0.04f, 0.04f, 0.04f);
   vg.filter (*cloud_filtered);
   std::cout << "Filtering successfully" << std::endl;
 
@@ -87,10 +91,10 @@ void cluster_pointcloud()
   seg.setModelType (pcl::SACMODEL_PLANE);
   seg.setMethodType (pcl::SAC_RANSAC);
   seg.setMaxIterations (100);
-  seg.setDistanceThreshold (0.02);
+  seg.setDistanceThreshold (0.12);
 
   int i=0, nr_points = (int) cloud_filtered->points.size ();
-  while (cloud_filtered->points.size () > 0.3 * nr_points)
+  while (cloud_filtered->points.size () > 0.2 * nr_points)
   {
     // Segment the largest planar component from the remaining cloud
     seg.setInputCloud (cloud_filtered);
@@ -133,6 +137,7 @@ void cluster_pointcloud()
   int j = 0;
   int a = 0;
   int set_r=0, set_g=0, set_b=0;
+  int start_index = 0;
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
     //set_r -= a;
@@ -144,22 +149,34 @@ void cluster_pointcloud()
     for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
     {
       cloud_cluster->points.push_back (cloud_filtered->points[*pit]); //*
+      result->points.push_back(cloud_filtered->points[*pit]);
       /*cloud_filtered->points[*pit].r = set_r;
       cloud_filtered->points[*pit].g = set_g;
       cloud_filtered->points[*pit].b = set_b;*/
     }
     pcl::compute3DCentroid(*cloud_cluster, centroid);
+    std::cout << centroid << std::endl;
+    //cloud_cluster->clear();
     //std::cout << centroid << std::endl;
 
     set_r = point_cloud_color(int(255 - std::abs(30*centroid[1])));
     set_g = point_cloud_color(int(std::abs(30*centroid[1])));
     set_b = 0;
-    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
+    /*for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
     {
       cloud_filtered->points[*pit].r = set_r;
       cloud_filtered->points[*pit].g = set_g;
       cloud_filtered->points[*pit].b = set_b;
+    }*/
+    for (int i = start_index; i < result->points.size(); ++i)
+    {
+      result->points[i].r = set_r;
+      result->points[i].g = set_g;
+      result->points[i].b = set_b;
     }
+    //std::cout << start_index << std::endl;
+    start_index = result->points.size();
+    //std::cout << start_index << std::endl << std::endl;
     //cloud_cluster->width = cloud_cluster->points.size ();
     //cloud_cluster->height = 1;
     //cloud_cluster->is_dense = true;
@@ -177,11 +194,14 @@ void cluster_pointcloud()
     a+=30;
     j++;
   }
-
+  result->header.frame_id = cloud_in->header.frame_id;
   //writer.write<pcl::PointXYZRGB> ("result.pcd", *cloud_filtered, false);
   std::cout << j << std::endl << "Finish" << std::endl << std::endl;
-  pub_XYZRGB.publish(*cloud_filtered);
+  pub_XYZRGB.publish(*result);
+  pcl::toROSMsg(*result, ros_out);
+  pointcloud2_publisher.publish(ros_out);
   lock = false;
+  result->clear();
 }
 
 int main (int argc, char** argv)
@@ -194,8 +214,8 @@ int main (int argc, char** argv)
      ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/velodyne_points", 1, cloud_cb);
      // Create a ROS publisher for the output point cloud
      //pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 1); 
-     pub_XYZRGB = nh.advertise<PointCloudXYZRGB> ("ros_pointcloudxyz", 1);
-     //pointcloud2_publisher = nh.advertise<sensor_msgs::PointCloud2> ("pcltoros_pointcloud2", 1);
+     pub_XYZRGB = nh.advertise<PointCloudXYZRGB> ("/ros_pointcloudxyz", 1);
+     pointcloud2_publisher = nh.advertise<sensor_msgs::PointCloud2> ("/pcl_ros", 1);
      // Spin
      ros::spin ();
 }

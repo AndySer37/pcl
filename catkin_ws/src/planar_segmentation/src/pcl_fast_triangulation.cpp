@@ -81,9 +81,10 @@ void cbPointCloud(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg)
 
     // copy msg to cloud
     pcl::fromROSMsg(*cloud_msg, *cloud);
-
-    //Voxel Grid Downsample
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_voxel(new pcl::PointCloud<pcl::PointXYZ>);
+    copyPointCloud(*cloud, *cloud_voxel);
+    //Voxel Grid Downsample
+    /*pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_voxel(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::VoxelGrid<pcl::PointXYZ> vg;
     vg.setInputCloud(cloud);
     vg.setLeafSize (0.05f, 0.05f, 0.05f);
@@ -104,7 +105,7 @@ void cbPointCloud(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg)
             cloud_voxel->points.resize(cloud_voxel->width);
             i--;
         }
-    }
+    }*/
 
     // Calcualte the normal of cloud
     pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
@@ -169,7 +170,7 @@ int main(int argc, char** argv)
 
     ros::NodeHandle nh("~");
     // Subscriber
-    ros::Subscriber sub_cloud = nh.subscribe("/velodyne_points", 1, cbPointCloud);
+    ros::Subscriber sub_cloud = nh.subscribe("/pcl_ros", 1, cbPointCloud);
     
     //Publisher
     pub_cloud_voxel = nh.advertise< pcl::PointCloud<pcl::PointXYZ> >("cloud_voxel", 1);
