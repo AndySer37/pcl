@@ -64,6 +64,17 @@ int point_cloud_color(int input){
   }
 }
 
+void max_min(float &i, float &max, float &min)
+{
+  if(i > max){max = i;}
+  if(i < min){min = i;}
+}
+float min_point(float i, float min)
+{
+  if(i < min){return i;}
+  else{return min;}
+}
+
 //void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
 void cluster_pointcloud()
 {
@@ -135,15 +146,21 @@ void cluster_pointcloud()
   int start_index = 0;
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
+    float max_x, max_y, max_z;
+    float min_x, min_y, min_z;
     Eigen::Vector4f centroid;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
     for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
     {
       cloud_cluster->points.push_back (cloud_filtered->points[*pit]); //*
       result->points.push_back(cloud_filtered->points[*pit]);
+      max_min(cloud_filtered->points[*pit].x, max_x, min_x);
+      max_min(cloud_filtered->points[*pit].y, max_y, min_y);
+      max_min(cloud_filtered->points[*pit].z, max_z, min_z);
     }
     pcl::compute3DCentroid(*cloud_cluster, centroid);
     std::cout << centroid << std::endl;
+    //cloud_cluster->clear();
 
     set_r = point_cloud_color(int(255 - std::abs(30*centroid[1])));
     set_g = point_cloud_color(int(std::abs(30*centroid[1])));
