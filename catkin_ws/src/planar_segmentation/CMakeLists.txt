@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   roscpp
   rospy
+  robotx_pcl_msgs
   sensor_msgs
   std_msgs
 )
@@ -232,3 +233,7 @@ add_executable(conditional_euclidean_clustering src/conditional_euclidean_cluste
 target_link_libraries(conditional_euclidean_clustering ${catkin_LIBRARIES})
 add_executable(clasifying src/clasifying.cpp)
 target_link_libraries(clasifying ${catkin_LIBRARIES})
+add_executable(pcl_normal src/pcl_normal.cpp)
+target_link_libraries(pcl_normal ${catkin_LIBRARIES})
+add_executable(obstacle_cluster src/obstacle_cluster.cpp)
+target_link_libraries(obstacle_cluster ${catkin_LIBRARIES})
