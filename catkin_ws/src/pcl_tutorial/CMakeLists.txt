@@ -238,3 +238,15 @@ target_link_libraries(classify_test ${catkin_LIBRARIES})
 
 add_executable(classify_ros src/classify_ros.cpp)
 target_link_libraries(classify_ros ${catkin_LIBRARIES})
+
+add_executable(classify_ros_back src/classify_ros_back.cpp)
+target_link_libraries(classify_ros_back ${catkin_LIBRARIES})
+
+add_executable(pfh_icp src/pfh_icp.cpp)
+target_link_libraries(pfh_icp ${catkin_LIBRARIES})
+
+add_executable(classify_pfh src/classify_pfh.cpp)
+target_link_libraries(classify_pfh ${catkin_LIBRARIES})
+
+add_executable(classify_vfh src/classify_vfh.cpp)
+target_link_libraries(classify_vfh ${catkin_LIBRARIES})

@@ -48,8 +48,6 @@ using namespace message_filters;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;
 typedef boost::shared_ptr <robotx_msgs::BoolStamped const> BoolStampedConstPtr;
-typedef pcl::PFHSignature125 PFH125;
-
 //declare point cloud
 PointCloudXYZ::Ptr cloud_inXYZ (new PointCloudXYZ);
 PointCloudXYZRGB::Ptr cloud_in (new PointCloudXYZRGB); 
@@ -76,6 +74,7 @@ float low = -0.25;
 float high = 1.5-low;
 float thres_low = 0.03;
 float thres_high = 1.5;
+float feature_sampling_space = 0.3;
 visualization_msgs::MarkerArray marker_array;
 visualization_msgs::MarkerArray marker_array_line;
 ros::Time pcl_t;
@@ -85,7 +84,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr&); //point cloud subscriber
 void cluster_pointcloud(void); //point cloud clustering
 void drawRviz(robotx_msgs::ObstaclePoseList); //draw marker in Rviz
 void drawRviz_line(robotx_msgs::ObstaclePoseList); //draw marker line list in Rviz
-int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr cloud_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_scene);
+int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr read_cloud_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_scene);
 
 //void callback(const sensor_msgs::PointCloud2ConstPtr& input, const robotx_msgs::BoolStampedConstPtr& tf_bool)
 void callback(const sensor_msgs::PointCloud2ConstPtr& input)
@@ -218,7 +217,7 @@ void cluster_pointcloud()
     // Estimate the normals.
     pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimation_scene;
     normalEstimation_scene.setInputCloud(cloud_cluster);
-    normalEstimation_scene.setRadiusSearch(0.5);//5
+    normalEstimation_scene.setRadiusSearch(feature_sampling_space);//5
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr kdtree_scene(new pcl::search::KdTree<pcl::PointXYZRGB>);
     normalEstimation_scene.setSearchMethod(kdtree_scene);
     normalEstimation_scene.compute(*normals_scene);
@@ -229,7 +228,7 @@ void cluster_pointcloud()
     pfh_scene.setSearchMethod(kdtree_scene);
     // Search radius, to look for neighbors. Note: the value given here has to be
     // larger than the radius used to estimate the normals.
-    pfh_scene.setRadiusSearch(0.5);
+    pfh_scene.setRadiusSearch(feature_sampling_space);
     pfh_scene.compute(*descriptors_scene);
 
     // Declare classify variable
@@ -242,72 +241,51 @@ void cluster_pointcloud()
       // Step 1: get input data & get keypoints
       // Object for storing the point cloud.
       PointCloudXYZRGB::Ptr cloud_model(new PointCloudXYZRGB);
-      pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model(new pcl::PointCloud<pcl::PFHSignature125>);
       // Read a PCD file from disk.
-      std::stringstream ss, tt;
-      ss << "totem/descriptors_" << n << ".pcd";
-      tt << "totem/model_" << n << ".pcd";
-      if (pcl::io::loadPCDFile<pcl::PFHSignature125>(ss.str (), *descriptors_model) != 0)
+      std::stringstream ss;
+      ss << "totem/model_" << n << ".pcd";
+      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(ss.str (), *cloud_model) != 0)
       {
         std::cout<< "No file to read" << std::endl;
         break;
       }
-      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(tt.str (), *cloud_model) != 0)
-      {
-        std::cout<< "No file to read" << std::endl;
-        break;
-      }
-      totem += classify(cloud_cluster, cloud_model, descriptors_model, descriptors_scene);
+      totem += classify(cloud_cluster, cloud_model, descriptors_scene);
     }
-    std::cout<<"totem: "<<totem<<std::endl;
+    //std::cout<<"totem: "<<totem<<std::endl;
 
     for(int n = 0; n <= 19; n++)
     {
       // Step 1: get input data & get keypoints
       // Object for storing the point cloud.
       PointCloudXYZRGB::Ptr cloud_model(new PointCloudXYZRGB);
-      pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model(new pcl::PointCloud<pcl::PFHSignature125>);
       // Read a PCD file from disk.
-      std::stringstream ss, tt;
-      ss << "buoy/descriptors_" << n << ".pcd";
-      tt << "buoy/model_" << n << ".pcd";
-      if (pcl::io::loadPCDFile<pcl::PFHSignature125>(ss.str (), *descriptors_model) != 0)
+      std::stringstream ss;
+      ss << "buoy/model_" << n << ".pcd";
+      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(ss.str (), *cloud_model) != 0)
       {
         std::cout<< "No file to read" << std::endl;
         break;
       }
-      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(tt.str (), *cloud_model) != 0)
-      {
-        std::cout<< "No file to read" << std::endl;
-        break;
-      }
-      buoy += classify(cloud_cluster, cloud_model, descriptors_model, descriptors_scene);
+      buoy += classify(cloud_cluster, cloud_model, descriptors_scene);
     }
-    std::cout<<"buoy: "<<buoy<<std::endl;
+    //std::cout<<"buoy: "<<buoy<<std::endl;
 
     for(int n = 0; n <= 19; n++)
     {
       // Step 1: get input data & get keypoints
       // Object for storing the point cloud.
       PointCloudXYZRGB::Ptr cloud_model(new PointCloudXYZRGB);
-      pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model(new pcl::PointCloud<pcl::PFHSignature125>);
       // Read a PCD file from disk.
-      std::stringstream ss, tt;
-      ss << "dock/descriptors_" << n << ".pcd";
-      tt << "dock/model_" << n << ".pcd";
-      if (pcl::io::loadPCDFile<pcl::PFHSignature125>(ss.str (), *descriptors_model) != 0)
+      std::stringstream ss;
+      ss << "dock/model_" << n << ".pcd";
+      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(ss.str (), *cloud_model) != 0)
       {
         std::cout<< "No file to read" << std::endl;
         break;
       }
-      if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(tt.str (), *cloud_model) != 0)
-      {
-        std::cout<< "No file to read" << std::endl;
-        break;
-      }
-      dock += classify(cloud_cluster, cloud_model, descriptors_model, descriptors_scene);
+      dock += classify(cloud_cluster, cloud_model, descriptors_scene);
     }
-    std::cout<<"dock: "<<totem<<std::endl;
+    //std::cout<<"dock: "<<totem<<std::endl;
 
     if(totem != 0 || buoy != 0 || dock != 0)
     {
@@ -324,7 +302,7 @@ void cluster_pointcloud()
       else if(dock > buoy && dock > totem)
       {
         ob_pose.r = 3;
-        std::cout<<"Found Dock"<<std::endl;
+        std::cout<<"Found Totem"<<std::endl;
       }
       else
       {
@@ -512,8 +490,36 @@ void drawRviz(robotx_msgs::ObstaclePoseList ob_list){
       pub_marker.publish(marker_array);
 }
 
-int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr cloud_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_scene)
+int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr read_cloud_model, pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_scene)
 {
+      // Step 1: get input data & get keypoints
+      // Object for storing the point cloud.
+      PointCloudXYZRGB::Ptr cloud_model(new PointCloudXYZRGB);
+      cloud_model = read_cloud_model;
+      // Object for storing the normals.
+      pcl::PointCloud<pcl::Normal>::Ptr normals_model(new pcl::PointCloud<pcl::Normal>);
+
+      // Step 2: calculate descriptors from keypoints
+      // Object for storing the PFH descriptors for each point.
+      pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors_model(new pcl::PointCloud<pcl::PFHSignature125>());
+      // Estimate the normals.
+      pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimation_model;
+      normalEstimation_model.setInputCloud(cloud_model);
+      normalEstimation_model.setRadiusSearch(feature_sampling_space);
+      pcl::search::KdTree<pcl::PointXYZRGB>::Ptr kdtree_model(new pcl::search::KdTree<pcl::PointXYZRGB>);
+      normalEstimation_model.setSearchMethod(kdtree_model);
+      normalEstimation_model.compute(*normals_model);
+      // PFH estimation object.
+      pcl::PFHEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHSignature125> pfh_model;
+      pfh_model.setInputCloud(cloud_model);
+      pfh_model.setInputNormals(normals_model);
+      pfh_model.setSearchMethod(kdtree_model);
+      // Search radius, to look for neighbors. Note: the value given here has to be
+      // larger than the radius used to estimate the normals.
+      pfh_model.setRadiusSearch(feature_sampling_space);
+      pfh_model.compute(*descriptors_model);
+
+      // Step 3: calculate correspondences of descriptors
       // A kd-tree object that uses the FLANN library for fast search of nearest neighbors.
       pcl::KdTreeFLANN<pcl::PFHSignature125> matching;
       matching.setInputCloud(descriptors_model);
@@ -536,7 +542,7 @@ int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr cloud_mo
             min_dist = squaredDistances[0];
           if (neighborCount == 1)
           {
-            std::cout << neighbors[0] << " " << squaredDistances[0] << std::endl;
+            //std::cout << neighbors[0] << " " << squaredDistances[0] << std::endl;
             pcl::Correspondence correspondence(neighbors[0], static_cast<int>(i), squaredDistances[0]);
             correspondences->push_back(correspondence);
           }
@@ -553,10 +559,10 @@ int classify(PointCloudXYZRGB::Ptr cloud_cluster, PointCloudXYZRGB::Ptr cloud_mo
       grouping.setModelSceneCorrespondences(correspondences);
       // Minimum cluster size. Default is 3 (as at least 3 correspondences
       // are needed to compute the 6 DoF pose).
-      grouping.setGCThreshold(4);
+      grouping.setGCThreshold(5);
       // Resolution of the consensus set used to cluster correspondences together,
       // in metric units. Default is 1.0.
-      grouping.setGCSize(0.08);
+      grouping.setGCSize(0.1);
       grouping.recognize(transformations, clusteredCorrespondences);
       if(transformations.size() > 0)
       {

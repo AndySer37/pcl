@@ -34,6 +34,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <pcl/features/pfh.h>
+#include <pcl/visualization/histogram_visualizer.h>
 using namespace Eigen;
 using namespace message_filters;
 //define point cloud type
@@ -65,6 +67,7 @@ float low = -0.58;
 float high = 1.5-low;
 float thres_low = 0.03;
 float thres_high = 1.5;
+int j = 0;
 visualization_msgs::MarkerArray marker_array;
 
 //declare function
@@ -145,11 +148,11 @@ void cluster_pointcloud()
   //wall->clear();
 
   //========== Outlier remove ==========
-  pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> out_filter;
+  /*pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> out_filter;
   out_filter.setInputCloud (cloud_filtered);
   out_filter.setMeanK (50);
   out_filter.setStddevMulThresh (1.0);
-  out_filter.filter (*cloud_filtered);
+  out_filter.filter (*cloud_filtered);*/
   
   //========== Planar filter ==========
   /*pcl::SACSegmentation<pcl::PointXYZRGB> seg;
@@ -228,13 +231,12 @@ void cluster_pointcloud()
   //*cloud_filtered += *hold_plane;*/
 
   //========== Remove Higer and Lower Place ==========
-  /*pcl::ExtractIndices<pcl::PointXYZRGB> extract_h_l_place;
+  pcl::ExtractIndices<pcl::PointXYZRGB> extract_h_l_place;
   pcl::PointIndices::Ptr hl_indices (new pcl::PointIndices);
   //std::cout<< low << "," << high << std::endl;
   for (int i = 0; i < cloud_filtered->points.size(); i++)
   {
-    //if (cloud_filtered->points[i].z >= high || cloud_filtered->points[i].z <= low)
-    if (cloud_filtered->points[i].z <= low)
+    if (cloud_filtered->points[i].y <=3.2 && cloud_filtered->points[i].y >= -3.5 && cloud_filtered->points[i].x >= -1.5 && cloud_filtered->points[i].x <= 1.5)
     {
       hl_indices->indices.push_back(i);
     }
@@ -243,7 +245,7 @@ void cluster_pointcloud()
   extract_h_l_place.setIndices(hl_indices);
   extract_h_l_place.setNegative(true);
   extract_h_l_place.filter(*cloud_h);
-  *cloud_filtered = *cloud_h;*/
+  *cloud_filtered = *cloud_h;
 
   //========== Project To Ground ==========
   // Create a set of planar coefficients with X=Y=0,Z=1
@@ -306,9 +308,9 @@ void cluster_pointcloud()
   // Create cluster object
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-  ec.setClusterTolerance (0.8); // unit: meter
-  ec.setMinClusterSize (20);
-  ec.setMaxClusterSize (100000);
+  ec.setClusterTolerance (1.3); // unit: meter
+  ec.setMinClusterSize (3);
+  ec.setMaxClusterSize (1000000);
   ec.setSearchMethod (tree);
   ec.setInputCloud (cloud_filtered);
   ec.extract (cluster_indices);
@@ -316,7 +318,7 @@ void cluster_pointcloud()
   int start_index = 0;
   int set_r=0, set_g=0, set_b=0;
   int rand = 0;
-  int j = 0;
+  //int j = 0;
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
     num_cluster++;
@@ -327,30 +329,43 @@ void cluster_pointcloud()
       cloud_cluster->points.push_back (cloud_filtered->points[*pit]); //*
       result->points.push_back(cloud_filtered->points[*pit]);
     }
-    pcl::compute3DCentroid(*cloud_cluster, centroid);
     
-    /*rand ++;
-    set_r = point_cloud_color(rand);
-    rand ++;
-    set_g = point_cloud_color(rand);
-    rand ++;
-    set_b = point_cloud_color(rand);
-    for (int i = start_index; i < result->points.size(); ++i)
-    {
-      result->points[i].r = set_r;
-      result->points[i].g = set_g;
-      result->points[i].b = set_b;
-    }*/
     result->width = result->points.size();
     result->height = 1;
-    start_index = result->points.size();
-
     cloud_cluster->width = cloud_cluster->points.size();
     cloud_cluster->height = 1;
-    std::stringstream ss;
-    ss << "model_" << j << ".pcd";
-    writer.write<pcl::PointXYZRGB> (ss.str (), *cloud_cluster, false); //*
+    // Start_index = result->points.size();
+
+    // Object for storing the normals.
+    pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+    // Object for storing the PFH descriptors for each point.
+    pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors(new pcl::PointCloud<pcl::PFHSignature125>());
+
+    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimation;
+    normalEstimation.setInputCloud(cloud_cluster);
+    normalEstimation.setRadiusSearch(0.5);
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZRGB>);
+    normalEstimation.setSearchMethod(kdtree);
+    normalEstimation.compute(*normals);
+
+    // PFH estimation object.
+    pcl::PFHEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHSignature125> pfh;
+    pfh.setInputCloud(cloud_cluster);
+    pfh.setInputNormals(normals);
+    pfh.setSearchMethod(kdtree);
+    // Search radius, to look for neighbors. Note: the value given here has to be
+    // larger than the radius used to estimate the normals.
+    pfh.setRadiusSearch(0.5);
+    pfh.compute(*descriptors);
+
+    std::stringstream ss, tt;
+    ss << "descriptors_" << j << ".pcd";
+    tt << "model_" << j << ".pcd";
+    std::cout<<j<<std::endl;
+    pcl::io::savePCDFileASCII (ss.str(), *descriptors);
+    pcl::io::savePCDFileASCII (tt.str(), *cloud_cluster);
     j++;
+
   }
 
 
@@ -366,6 +381,7 @@ void cluster_pointcloud()
   lock = false;
   result->clear();
   hold_plane->clear();
+  ros::Duration(2.0).sleep();
   //wall->clear();
 }
 
