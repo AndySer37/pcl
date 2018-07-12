@@ -16,8 +16,8 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
-#include <robotx_pcl_msgs/ObstaclePose.h>
-#include <robotx_pcl_msgs/ObstaclePoseList.h>
+#include <robotx_msgs/ObstaclePose.h>
+#include <robotx_msgs/ObstaclePoseList.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Point.h>
 #include <std_msgs/ColorRGBA.h>
@@ -41,7 +41,7 @@ bool lock = false;
 void cluster_pointcloud(void);
 int point_cloud_color(int input);
 
-void drawCube(robotx_pcl_msgs::ObstaclePoseList ob_list){
+void drawCube(robotx_msgs::ObstaclePoseList ob_list){
       visualization_msgs::Marker  marker;
       marker.header.frame_id = "velodyne";
       marker.header.stamp = ros::Time::now();
@@ -189,11 +189,11 @@ void cluster_pointcloud()
   int num_cluster = 0;
   int set_r=0, set_g=0, set_b=0;
   int start_index = 0;
-  robotx_pcl_msgs::ObstaclePoseList ob_list;
+  robotx_msgs::ObstaclePoseList ob_list;
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
     num_cluster++;
-    robotx_pcl_msgs::ObstaclePose ob_pose;
+    robotx_msgs::ObstaclePose ob_pose;
     Eigen::Vector4f centroid;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
     for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)

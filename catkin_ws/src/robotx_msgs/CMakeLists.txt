@@ -22,6 +22,7 @@ add_message_files(
   ObstaclePoseList.msg
   Waypoint.msg
   WaypointList.msg
+  PCL_points.msg
 )
 
 ## Generate added messages and services with any dependencies listed here

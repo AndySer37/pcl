@@ -6,6 +6,7 @@ import rospy
 import tf
 import struct
 import math
+import time
 from time import time, sleep
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
@@ -18,6 +19,7 @@ class pcl2img():
 		self.height = self.width = 480.0
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
+		self.index = 0
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_m = 10e5
@@ -68,7 +70,7 @@ class pcl2img():
 					elif plane == 'xz':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][2] = 255
 
-		cv2.imwrite( "Image_" + plane + ".jpg", img )
+		#cv2.imwrite( "Image_" + plane + ".jpg", img )
 
 	def call_back(self, msg):
 		#rospy.loginfo("recieve")
@@ -86,8 +88,10 @@ class pcl2img():
 		self.toIMG(pcl_size, plane_xy, 'xy')
 		self.toIMG(pcl_size, plane_yz, 'yz')
 		self.toIMG(pcl_size, plane_xz, 'xz')
-		cv2.imwrite( "Image.jpg", self.image)
+		cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
+		self.index = self.index + 1
 		print "Save image"
+		rospy.sleep(0.1)
 
 if __name__ == '__main__':
 	rospy.init_node('pcl2img')

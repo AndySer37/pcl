@@ -250,3 +250,6 @@ target_link_libraries(classify_pfh ${catkin_LIBRARIES})
 
 add_executable(classify_vfh src/classify_vfh.cpp)
 target_link_libraries(classify_vfh ${catkin_LIBRARIES})
+
+add_executable(classify_project src/classify_project.cpp)
+target_link_libraries(classify_project ${catkin_LIBRARIES})

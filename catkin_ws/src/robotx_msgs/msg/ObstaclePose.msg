@@ -19,3 +19,5 @@ float64 y_max_x
 float64 y_max_y
 int32 confidence
 bool occupy
+string type
+sensor_msgs/PointCloud2 cloud

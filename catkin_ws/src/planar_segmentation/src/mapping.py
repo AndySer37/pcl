@@ -4,7 +4,7 @@ from tf import TransformListener,TransformerROS
 from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
 from sensor_msgs.msg import PointCloud2
-from robotx_msgs.msg import ObstaclePoseList, Waypoint, WaypointList
+from robotx_msgs.msg import ObstaclePose, ObstaclePoseList, Waypoint, WaypointList
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 import numpy as np
@@ -20,10 +20,7 @@ class pcl2img():
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Declare Variable ========
-		self.map = []
-		self.boundary = 50
-		self.height = self.width = 480.0
-		self.point_size = 2
+		self.map = ObstaclePoseList()
 
 	def call_back(msg):
 		try:
