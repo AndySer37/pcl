@@ -16,7 +16,8 @@ class pcl2img():
 		rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.boundary = 50
 		self.height = self.width = 480.0
-		self.point_size = 2
+		self.point_size = 4	# must be integer
+		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_m = 10e5
@@ -60,12 +61,19 @@ class pcl2img():
 			for m in range(-self.point_size, self.point_size + 1):
 				for n in range(-self.point_size, self.point_size + 1):
 					img[pcl_array[i][0] + m  , pcl_array[i][1] + n] = (0,255,255)
+					if plane == 'xy':
+						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][0] = 255
+					elif plane == 'yz':
+						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][1] = 255
+					elif plane == 'xz':
+						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][2] = 255
 
 		cv2.imwrite( "Image_" + plane + ".jpg", img )
 
 	def call_back(self, msg):
 		#rospy.loginfo("recieve")
 		#msg.data = np.asarray(points, np.float32).tostring()
+		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 		pcl_size = len(msg.poses)
 		plane_xy = []
 		plane_yz = []
@@ -78,6 +86,7 @@ class pcl2img():
 		self.toIMG(pcl_size, plane_xy, 'xy')
 		self.toIMG(pcl_size, plane_yz, 'yz')
 		self.toIMG(pcl_size, plane_xz, 'xz')
+		cv2.imwrite( "Image.jpg", self.image)
 		print "Save image"
 
 if __name__ == '__main__':
