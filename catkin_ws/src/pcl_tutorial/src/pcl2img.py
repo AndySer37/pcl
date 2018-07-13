@@ -7,7 +7,6 @@ import tf
 import struct
 import math
 import time
-from time import time, sleep
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import PoseArray
@@ -39,7 +38,7 @@ class pcl2img():
 		self.model_name = "CaffeNet"
 		rospy.loginfo('[%s] model name = %s' %(self.node_name, self.model_name))
 		rospack = rospkg.RosPack()
-		self.model_Base_Dir = rospack.get_path('placard_prediction') + '/models/' + self.model_name + '/'
+		self.model_Base_Dir = rospack.get_path('pcl_tutorial') + '/models/' + self.model_name + '/'
 		self.labels = []
 		with open(self.model_Base_Dir+'label.txt', 'r') as f:
 			lines = f.readlines()
@@ -131,7 +130,7 @@ class pcl2img():
 		output_prob = output['prob'][0]
 		output_max_class = output_prob.argmax()
 		print "prediction time taken = ", time.clock() - t_start
-		print "Predict: ", output_max_class
+		print "Predict: ", self.labels[output_max_class]
 
 
 	def call_back(self, msg):
@@ -142,6 +141,7 @@ class pcl2img():
 			plane_xy = []
 			plane_yz = []
 			plane_xz = []
+			pcl_size = len(msg.list[i].poses)
 			for j in range(pcl_size): # project to XY, YZ, XZ plane
 				plane_xy.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.y])
 				plane_yz.append([msg.list[i].poses[j].position.y, msg.list[i].poses[j].position.z])
