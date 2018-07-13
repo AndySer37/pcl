@@ -31,7 +31,7 @@ class pcl2img():
 		self.height = self.width = 480.0
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
-		self.index = 88
+		self.index = 0
 		# ***************************************************************
 		# Get the position of caffemodel folder
 		# ***************************************************************
@@ -119,13 +119,14 @@ class pcl2img():
 		# ***************************************************************
 		# Using Caffe Model to do prediction
 		# ***************************************************************
+		img = cv2.resize(self.image, self.dim)
 		caffe.set_device(0)
 		caffe.set_mode_gpu()
 		t_start = time.clock()
 		transformer = caffe.io.Transformer({'data': self.net.blobs['data'].data.shape})
 		transformer.set_transpose('data', (2, 0, 1))
 		self.net.blobs['data'].reshape(1, 3, self.dim[0], self.dim[1])
-		self.net.blobs['data'].data[...] = transformer.preprocess('data', self.image)
+		self.net.blobs['data'].data[...] = transformer.preprocess('data', img)
 		output = self.net.forward()
 		output_prob = output['prob'][0]
 		output_max_class = output_prob.argmax()
