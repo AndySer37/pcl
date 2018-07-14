@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<launch>
-	<node pkg="pcl_tutorial" type="classify_project" name="classify_project" output="screen"></node>
-	<node pkg="planar_segmentation" type="pcl2array" name="pcl2array" output="screen"></node>
-</launch>

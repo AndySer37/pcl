@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+	<node pkg="classify" type="cluster_pcl2points" name="cluster_pcl2points" output="screen"></node>
+	<!--node pkg="classify" type="pcl2array" name="pcl2array" output="screen"></node-->
+</launch>
