@@ -10,7 +10,8 @@ import time
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import PoseArray
-from robotx_msgs.msg import PCL_points
+from visualization_msgs.msg import Marker, MarkerArray
+from robotx_msgs.msg import PCL_points, ObstaclePose, ObstaclePoseList
 import rospkg
 from cv_bridge import CvBridge, CvBridgeError
 import sys
@@ -25,12 +26,14 @@ class pcl2img():
 		self.node_name = rospy.get_name()
 		rospy.loginfo("[%s] Initializing " %(self.node_name))
 		rospy.Subscriber('/pcl_points', PCL_points, self.call_back)
+		self.pub_marker = rospy.Publisher("/obs_classify", MarkerArray, queue_size = 1)
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.boundary = 50
 		self.height = self.width = 480.0
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
-		self.index = 0
+		#self.index = 0
+
 		# ***************************************************************
 		# Get the position of caffemodel folder
 		# ***************************************************************
@@ -45,6 +48,7 @@ class pcl2img():
 		for line in lines:
 			line = line.replace('\n', '')
 			self.labels.append(line)
+
         # ***************************************************************
         # Variables
         # ***************************************************************
@@ -131,9 +135,59 @@ class pcl2img():
 		output_max_class = output_prob.argmax()
 		print "prediction time taken = ", time.clock() - t_start
 		print "Predict: ", self.labels[output_max_class]
+		return self.labels[output_max_class]
 
+	def drawRviz(self, obs_list):
+		marker_array = MarkerArray()
+		# marker_array.markers.resize(obs_list.size)
+		for i in range(obs_list.size):
+			marker = Marker()
+			marker.header.frame_id = obs_list.header.frame_id
+			marker.id = i
+			marker.header.stamp = rospy.Time.now()
+			marker.type = Marker.CUBE
+			marker.action = Marker.ADD
+			marker.lifetime = rospy.Duration(0.5)
+			marker.pose.position.x = obs_list.list[i].x
+			marker.pose.position.y = obs_list.list[i].y
+			marker.pose.position.z = obs_list.list[i].z
+			marker.pose.orientation.x = 0.0
+			marker.pose.orientation.y = 0.0
+			marker.pose.orientation.z = 0.0
+			marker.pose.orientation.w = 1.0
+			marker.scale.x = 1
+			marker.scale.y = 1
+			marker.scale.z = 1
+			if obs_list.list[i].type == "buoy":
+				marker.color.r = 0
+				marker.color.g = 0
+				marker.color.b = 1
+				marker.color.a = 0.5
+			elif obs_list.list[i].type == "totem":
+				marker.color.r = 0
+				marker.color.g = 1
+				marker.color.b = 0
+				marker.color.a = 0.5
+			elif obs_list.list[i].type == "dock":
+				marker.color.r = 1
+				marker.color.g = 1
+				marker.color.b = 1
+				marker.color.a = 0.5
+				marker.scale.x = 6
+				marker.scale.y = 6
+				marker.scale.z = 1
+			else:
+				marker.color.r = 1
+				marker.color.g = 0
+				marker.color.b = 0
+				marker.color.a = 0.5
+			marker_array.markers.append(marker)
+		self.pub_marker.publish(marker_array)
 
 	def call_back(self, msg):
+		obs_list = ObstaclePoseList()
+		obs_list.header.frame_id = msg.header.frame_id
+		obs_list.size = 0
 		cluster_num = len(msg.list)
 		#pcl_size = len(msg.poses)
 		for i in range(cluster_num):
@@ -142,17 +196,32 @@ class pcl2img():
 			plane_yz = []
 			plane_xz = []
 			pcl_size = len(msg.list[i].poses)
+			avg_x = avg_y = avg_z = 0
 			for j in range(pcl_size): # project to XY, YZ, XZ plane
+				avg_x = avg_x + msg.list[i].poses[j].position.x
+				avg_y = avg_y + msg.list[i].poses[j].position.y
+				avg_z = avg_z + msg.list[i].poses[j].position.z
 				plane_xy.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.y])
 				plane_yz.append([msg.list[i].poses[j].position.y, msg.list[i].poses[j].position.z])
 				plane_xz.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.z])
 			self.toIMG(pcl_size, plane_xy, 'xy')
 			self.toIMG(pcl_size, plane_yz, 'yz')
 			self.toIMG(pcl_size, plane_xz, 'xz')
-			self.classify()
+			model_type = self.classify()
+			# ***************************************************************
+			# Add to obstacle list
+			# ***************************************************************
+			obs = ObstaclePose()
+			obs.x = float(avg_x/pcl_size)
+			obs.y = float(avg_y/pcl_size)
+			obs.z = float(avg_z/pcl_size)
+			obs.type = model_type
+			obs_list.list.append(obs)
 			#cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
 			#self.index = self.index + 1
 			#print "Save image"
+		obs_list.size = cluster_num
+		self.drawRviz(obs_list)
 
 if __name__ == '__main__':
 	rospy.init_node('pcl2img')
