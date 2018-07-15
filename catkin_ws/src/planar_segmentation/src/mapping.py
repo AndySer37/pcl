@@ -12,7 +12,7 @@ import numpy as np
 class pcl2img():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/object_list", ObjectPoseList, call_back, queue_size=10)
+		rospy.Subscriber("/obj_list", ObjectPoseList, call_back, queue_size=10)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
