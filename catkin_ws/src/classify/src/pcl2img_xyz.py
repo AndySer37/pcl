@@ -26,6 +26,7 @@ class pcl2img():
 		self.node_name = rospy.get_name()
 		rospy.loginfo("[%s] Initializing " %(self.node_name))
 		rospy.Subscriber('/pcl_points', PCL_points, self.call_back)
+		self.pub_obj = rospy.Publisher("obj_list", ObjectPoseList, queue_size = 1)
 		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.boundary = 50
@@ -225,6 +226,7 @@ class pcl2img():
 			#self.index = self.index + 1
 			#print "Save image"
 		obj_list.size = cluster_num
+		self.pub_obj.publish(obj_list)
 		self.drawRviz(obj_list)
 
 if __name__ == '__main__':
