@@ -1,0 +1,9 @@
+Header header
+geometry_msgs/Point position
+geometry_msgs/Quaternion orientation
+float64 covarianceX
+float64 covarianceY
+int32 matching_index
+bool occupy
+string type
+sensor_msgs/PointCloud2 cloud

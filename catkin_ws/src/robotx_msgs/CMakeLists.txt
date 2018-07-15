@@ -22,6 +22,8 @@ add_message_files(
   ObstaclePoseList.msg
   Waypoint.msg
   WaypointList.msg
+  ObjectPose.msg
+  ObjectPoseList.msg
   PCL_points.msg
 )
 
@@ -40,7 +42,7 @@ catkin_package(
    sensor_msgs
    std_msgs
    message_runtime
-   visualization_msgs  
+   visualization_msgs
 )
 
 include_directories(
