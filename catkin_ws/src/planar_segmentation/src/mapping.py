@@ -4,7 +4,7 @@ from tf import TransformListener,TransformerROS
 from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
 from sensor_msgs.msg import PointCloud2
-from robotx_msgs.msg import ObstaclePose, ObstaclePoseList, Waypoint, WaypointList
+from robotx_msgs.msg import ObjectPose, ObjectPoseList
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 import numpy as np
@@ -12,49 +12,117 @@ import numpy as np
 class pcl2img():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/obstacle_list", ObstaclePoseList, call_back, queue_size=10)
+		rospy.Subscriber("/object_list", ObjectPoseList, call_back, queue_size=10)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
-		pub_obs = rospy.Publisher("/obstacle_list/map", ObstaclePoseList, queue_size=1)
+		pub_obj = rospy.Publisher("/object_list/map", ObjectPoseList, queue_size=1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Declare Variable ========
-		self.map = ObstaclePoseList()
+		self.map = ObjectPoseList()
+		self.obj_list = None
+		self.matching = []
+		self.r_threshold = 1
+		self.prior_mean = None
+		self.prior_cov = None
+		self.covX = None
+		self.covY = None
+		# ======== Get from odometry =======
+		self.pos_covariance = np.diag([3., 3.])
+		self.sensor_error = 1.
 
-	def call_back(msg):
+	def call_back(self, msg):
 		try:
-		print ("Process Obstacle List")
-			obs_list = ObstaclePoseList()
-			obs_list = msg
+			rospy.loginfo("Process Object List")
+			self.obj_list = ObjectPoseList()
+			self.obj_list = msg
+			self.matching = []
 			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
 			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
-			for obs_index in range(obs_list.size):
-				origin_p  = np.array([obs_list.list[obs_index].x, obs_list.list[obs_index].y, obs_list.list[obs_index].z, 1])
-				origin_p1 = np.array([obs_list.list[obs_index].x_min_x, obs_list.list[obs_index].x_min_y, 0, 1])
-				origin_p2 = np.array([obs_list.list[obs_index].y_min_x, obs_list.list[obs_index].y_min_y, 0, 1])
-				origin_p3 = np.array([obs_list.list[obs_index].x_max_x, obs_list.list[obs_index].x_max_y, 0, 1])
-				origin_p4 = np.array([obs_list.list[obs_index].y_max_x, obs_list.list[obs_index].y_max_y, 0, 1])
-				new_p = np.dot(transpose_matrix, origin_p)
-				new_p1 = np.dot(transpose_matrix, origin_p1)
-				new_p2 = np.dot(transpose_matrix, origin_p2)
-				new_p3 = np.dot(transpose_matrix, origin_p3)
-				new_p4 = np.dot(transpose_matrix, origin_p4)
-				obs_list.list[obs_index].x = new_p[0]
-				obs_list.list[obs_index].y = new_p[1]
-				obs_list.list[obs_index].x_min_x = new_p1[0]
-				obs_list.list[obs_index].x_min_y = new_p1[1]
-				obs_list.list[obs_index].y_min_x = new_p2[0]
-				obs_list.list[obs_index].y_min_y = new_p2[1]
-				obs_list.list[obs_index].x_max_x = new_p3[0]
-				obs_list.list[obs_index].x_max_y = new_p3[1]
-				obs_list.list[obs_index].y_max_x = new_p4[0]
-				obs_list.list[obs_index].y_max_y = new_p4[1]
-				obs_list.header.frame_id = "map"
-			pub_obs.publish(obs_list)
+			for obj_index in range(self.obj_list.size):
+				center  = np.array([self.obj_list.list[obj_index].position.x, 
+									self.obj_list.list[obj_index].position.y, 
+									self.obj_list.list[obj_index].position.z, 1])
+				new_center = np.dot(transpose_matrix, center)
+				self.obj_list.list[obj_index].position.x = new_center[0]
+				self.obj_list.list[obj_index].position.y = new_center[1]
+				self.obj_list.list[obj_index].position.z = new_center[2]
+				self.obj_list.header.frame_id = "map"
+			if self.first:
+				self.obj_list = self.map
+			else:
+				for i in range(self.map.size):
+					self.map.list[i].occupy = False
+				self.data_associate()
+				self.update_map()
+			pub_obj.publish(self.obj_list)
 
 		except (LookupException, ConnectivityException, ExtrapolationException):
-			print "Nothing Happen"
+			print "TF recieve error"
+
+	def data_associate(self):
+		for i in range(self.obj_list.size):
+			min_dis = 10e5
+			index = None
+			for j in range(self.map.size):
+				if self.map.list[j].occupy:
+					dis = self.distance(self.obj_list.list[i], self.map.list[j])
+					if dis < min_dis:
+						index = j
+						min_dis = dis
+			if min_dis < self.r_threshold:
+				self.map.list[index].occupy = True
+			self.matching.append(index)
+
+	def update_map(self):
+		for i in range(self.obj_list.size):
+			index = self.matching[i]
+			if self.matching[i] != None:
+				# Kalman filter update position
+				pos, cov = self.kalman_filter(self.obj_list.list[i].position.x, self.obj_list.list[i].position.y)	
+				self.map.list[index].position.x = pos[0]
+				self.map.list[index].position.y = pos[1]
+				self.map.list[index].covarianceX = cov[0][0]
+				self.map.list[index].covarianceY = cov[1][1]
+				self.covX = cov[0][0]
+				self.covY = cov[1][1]
+			else:
+				obj = ObjectPose()
+				obj.position = self.obj_list.list[i]
+				obj.covarianceX = self.covX
+				obj.covarianceY = self.covY
+				self.map.list.append(obj)
+		self.map.size = len(self.map.list)
+
+
+	def kalman_filter(self, x, y):
+		#======= Predict =======
+		if self.prior_mean == None:	# Recieve first measurement
+			self.prior_mean = np.array([x, y])		# State vector
+			self.prior_cov = self.pos_covariance		# Covariance matrix
+		F = np.array([[1., 0], [0, 1.]])			# State transition matrix
+		predict_mean = np.dot(F, self.prior_mean)
+		predict_cov = np.dot(F, self.prior_cov).np.dot(F.T)
+		#predict_pos = np.random.multivariate_normal(predict_mean, predict_cov, 100)
+
+		#======= Update step =======
+		z = np.array([x, y])				# Measurement
+		H = np.array([[1., 0]])				# Measurement function (Nothing to convert to measurement space)
+		R = np.array([[self.sensor_error]]) # Measurement covariance (For sensor)
+		S = np.dot(H, predict_cov).np.dot(H.T) + R 				# System uncertainty
+		K = np.dot(predict_cov, H.T).np.dot(np.linalg.inv(S))	# Kalman gain
+		residual = z - np.dot(H, predict_mean)					# Residual = measurement - prediction
+		posterior_mean = predict_mean + np.dot(K, residual)
+		posterior_cov = predict_cov - np.dot(K, H).dot(predict_cov)
+		self.prior_mean = posterior_mean
+		self.prior_cov = posterior_cov
+		return posterior_mean, posterior_cov
+
+	def distance(self, a, b): # caculate distance between two 3d points
+		return math.sqrt((a.position.x-b.position.x)*(a.position.x-b.position.x) + 
+						(a.position.y-b.position.y)*(a.position.y-b.position.y) + 
+						(a.position.z-b.position.z)*(a.position.z-b.position.z))
 
 if __name__ == "__main__":
 	rospy.init_node('mapping')
