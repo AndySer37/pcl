@@ -15,6 +15,7 @@ from robotx_msgs.msg import PCL_points, ObjectPose, ObjectPoseList
 import rospkg
 from cv_bridge import CvBridge, CvBridgeError
 
+
 class pcl2img():
 	def __init__(self):
 		self.node_name = rospy.get_name()
@@ -30,25 +31,42 @@ class pcl2img():
 		self.index = 0
 
 	def call_back(self, msg):
-		cluster_num = len(msg.list)
+		tf_points = PCL_points()
+		tf_points = msg
+		cluster_num = len(tf_points.list)
 		#pcl_size = len(msg.poses)
 		for i in range(cluster_num):
 			self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 			plane_xy = []
 			plane_yz = []
 			plane_xz = []
-			pcl_size = len(msg.list[i].poses)
-			avg_x = avg_y = avg_z = 0
-			for j in range(pcl_size): # project to XY, YZ, XZ plane
-				avg_x = avg_x + msg.list[i].poses[j].position.x
-				avg_y = avg_y + msg.list[i].poses[j].position.y
-				avg_z = avg_z + msg.list[i].poses[j].position.z
-				plane_xy.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.y])
-				plane_yz.append([msg.list[i].poses[j].position.y, msg.list[i].poses[j].position.z])
-				plane_xz.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.z])
+			pcl_size = len(tf_points.list[i].poses)
+
+			# ======= Coordinate transform for better project performance ======
+			position = [0, 0, 0]
+			rad = math.atan2(tf_points.centroids[i].y, tf_points.centroids[i].x)
+			quaternion = tf.transformations.quaternion_from_euler(0., 0., -rad)
+			transformer = tf.TransformerROS()
+			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
+			for m in range(pcl_size):
+				new_x = tf_points.list[i].poses[m].position.x
+				new_y = tf_points.list[i].poses[m].position.y
+				new_z = tf_points.list[i].poses[m].position.z
+				orig_point = np.array([new_x, new_y, new_z, 1])
+				new_center = np.dot(transpose_matrix, orig_point)
+				tf_points.list[i].poses[m].position.x = new_center[0]
+				tf_points.list[i].poses[m].position.y = new_center[1]
+				tf_points.list[i].poses[m].position.z = new_center[2]
+
+			# ======= project to XY, YZ, XZ plane =======
+			for j in range(pcl_size):
+				plane_xy.append([tf_points.list[i].poses[j].position.x, tf_points.list[i].poses[j].position.y])
+				plane_yz.append([tf_points.list[i].poses[j].position.y, tf_points.list[i].poses[j].position.z])
+				plane_xz.append([tf_points.list[i].poses[j].position.x, tf_points.list[i].poses[j].position.z])
 			self.toIMG(pcl_size, plane_xy, 'xy')
 			self.toIMG(pcl_size, plane_yz, 'yz')
 			self.toIMG(pcl_size, plane_xz, 'xz')
+			#cv2.imwrite( "Image.jpg", self.image)
 			cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
 			self.index = self.index + 1
 			print "Save image"

@@ -222,7 +222,7 @@ class pcl2img():
 			obj.position.z = float(avg_z/pcl_size)
 			obj.type = model_type
 			obj_list.list.append(obj)
-			cv2.imwrite( "Image.jpg", self.image)
+			#cv2.imwrite( "Image.jpg", self.image)
 			#self.index = self.index + 1
 			#print "Save image"
 		obj_list.size = cluster_num

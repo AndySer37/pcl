@@ -14,12 +14,6 @@ from visualization_msgs.msg import Marker, MarkerArray
 from robotx_msgs.msg import PCL_points, ObstaclePose, ObstaclePoseList
 import rospkg
 from cv_bridge import CvBridge, CvBridgeError
-import sys
-from os.path import expanduser
-caffe_root = expanduser("~")
-sys.path.insert(0, caffe_root + '/caffe/python')
-import caffe
-import os
 
 class pcl2img():
 	def __init__(self):
@@ -33,6 +27,24 @@ class pcl2img():
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 		self.index = 0
+
+	def call_back(self, msg):
+		cluster_num = len(msg.list)
+		#pcl_size = len(msg.poses)
+		for i in range(cluster_num):
+			self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
+			img = []
+			pcl_size = len(msg.list[i].poses)
+			avg_x = avg_y = avg_z = 0
+			for j in range(pcl_size): # project to XY, YZ, XZ plane
+				avg_x = avg_x + msg.list[i].poses[j].position.x
+				avg_y = avg_y + msg.list[i].poses[j].position.y
+				avg_z = avg_z + msg.list[i].poses[j].position.z
+				img.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.y, msg.list[i].poses[j].position.z])
+			self.toIMG(pcl_size, img, 'img')
+			cv2.imwrite( "Image_" + str(self.index) + ".jpg", self.image)
+			self.index = self.index + 1
+			print "Save image"
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_x = 10e5
@@ -93,75 +105,6 @@ class pcl2img():
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][2] = 255
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][1] = 255
 		#cv2.imwrite( "Image_" + plane + ".jpg", img )
-
-
-	def drawRviz(self, obs_list):
-		marker_array = MarkerArray()
-		# marker_array.markers.resize(obs_list.size)
-		for i in range(obs_list.size):
-			marker = Marker()
-			marker.header.frame_id = obs_list.header.frame_id
-			marker.id = i
-			marker.header.stamp = rospy.Time.now()
-			marker.type = Marker.CUBE
-			marker.action = Marker.ADD
-			marker.lifetime = rospy.Duration(0.5)
-			marker.pose.position.x = obs_list.list[i].x
-			marker.pose.position.y = obs_list.list[i].y
-			marker.pose.position.z = obs_list.list[i].z
-			marker.pose.orientation.x = 0.0
-			marker.pose.orientation.y = 0.0
-			marker.pose.orientation.z = 0.0
-			marker.pose.orientation.w = 1.0
-			marker.scale.x = 1
-			marker.scale.y = 1
-			marker.scale.z = 1
-			if obs_list.list[i].type == "buoy":
-				marker.color.r = 0
-				marker.color.g = 0
-				marker.color.b = 1
-				marker.color.a = 0.5
-			elif obs_list.list[i].type == "totem":
-				marker.color.r = 0
-				marker.color.g = 1
-				marker.color.b = 0
-				marker.color.a = 0.5
-			elif obs_list.list[i].type == "dock":
-				marker.color.r = 1
-				marker.color.g = 1
-				marker.color.b = 1
-				marker.color.a = 0.5
-				marker.scale.x = 6
-				marker.scale.y = 6
-				marker.scale.z = 1
-			else:
-				marker.color.r = 1
-				marker.color.g = 0
-				marker.color.b = 0
-				marker.color.a = 0.5
-			marker_array.markers.append(marker)
-		self.pub_marker.publish(marker_array)
-
-	def call_back(self, msg):
-		obs_list = ObstaclePoseList()
-		obs_list.header.frame_id = msg.header.frame_id
-		obs_list.size = 0
-		cluster_num = len(msg.list)
-		#pcl_size = len(msg.poses)
-		for i in range(cluster_num):
-			self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
-			img = []
-			pcl_size = len(msg.list[i].poses)
-			avg_x = avg_y = avg_z = 0
-			for j in range(pcl_size): # project to XY, YZ, XZ plane
-				avg_x = avg_x + msg.list[i].poses[j].position.x
-				avg_y = avg_y + msg.list[i].poses[j].position.y
-				avg_z = avg_z + msg.list[i].poses[j].position.z
-				img.append([msg.list[i].poses[j].position.x, msg.list[i].poses[j].position.y, msg.list[i].poses[j].position.z])
-			self.toIMG(pcl_size, img, 'img')
-			cv2.imwrite( "Image_" + str(self.index) + ".jpg", self.image)
-			self.index = self.index + 1
-			print "Save image"
 
 if __name__ == '__main__':
 	rospy.init_node('pcl2img')

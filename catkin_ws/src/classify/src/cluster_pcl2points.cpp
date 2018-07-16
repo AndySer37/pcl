@@ -204,9 +204,9 @@ void cluster_pointcloud()
         y_max_y = cloud_filtered->points[*pit].y;
       }
     }
-    pcl::compute3DCentroid(*cloud_cluster, centroid);
+    
     num_cluster++;
-
+    // ======= convert cluster pointcloud to points =======
     geometry_msgs::PoseArray pose_arr;
     for (size_t i = 0; i < cloud_cluster->points.size(); i++){
         geometry_msgs::Pose p;
@@ -216,6 +216,14 @@ void cluster_pointcloud()
         pose_arr.poses.push_back(p);
     }
     pcl_points.list.push_back(pose_arr);
+
+    // ======= add cluster centroid =======
+    pcl::compute3DCentroid(*cloud_cluster, centroid);
+    geometry_msgs::Point c;
+    c.x = centroid[0];
+    c.y = centroid[1];
+    c.z = centroid[2];
+    pcl_points.centroids.push_back(c);
     //pub_PoseArray.publish(pose_arr);
     //pub_2d_pcl.publish(*cloud);
 
