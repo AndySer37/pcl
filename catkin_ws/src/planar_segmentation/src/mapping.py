@@ -41,9 +41,10 @@ class pcl2img():
 			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
 			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
 			for obj_index in range(self.obj_list.size):
-				center  = np.array([self.obj_list.list[obj_index].position.x, 
-									self.obj_list.list[obj_index].position.y, 
-									self.obj_list.list[obj_index].position.z, 1])
+				center_x = self.obj_list.list[obj_index].position.x
+				center_y = self.obj_list.list[obj_index].position.y
+				center_z = self.obj_list.list[obj_index].position.z
+				center  = np.array([center_x, center_y, center_z, 1])
 				new_center = np.dot(transpose_matrix, center)
 				self.obj_list.list[obj_index].position.x = new_center[0]
 				self.obj_list.list[obj_index].position.y = new_center[1]
@@ -120,9 +121,7 @@ class pcl2img():
 		return posterior_mean, posterior_cov
 
 	def distance(self, a, b): # caculate distance between two 3d points
-		return math.sqrt((a.position.x-b.position.x)*(a.position.x-b.position.x) + 
-						(a.position.y-b.position.y)*(a.position.y-b.position.y) + 
-						(a.position.z-b.position.z)*(a.position.z-b.position.z))
+		return math.sqrt((a.position.x-b.position.x)**2 + (a.position.y-b.position.y)**2 + (a.position.z-b.position.z)**2)
 
 if __name__ == "__main__":
 	rospy.init_node('mapping')
