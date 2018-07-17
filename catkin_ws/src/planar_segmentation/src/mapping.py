@@ -3,6 +3,7 @@ import rospy
 from tf import TransformListener,TransformerROS
 from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
+import math
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
 from visualization_msgs.msg import Marker, MarkerArray
@@ -26,7 +27,7 @@ class mapping():
 		self.map.header.frame_id = "map"
 		self.obj_list = None
 		self.matching = []
-		self.r_threshold = 5
+		self.r_threshold = 3
 		self.prior_mean = None
 		self.prior_cov = None
 		self.covX = None
@@ -73,7 +74,7 @@ class mapping():
 			min_dis = 10e5
 			index = None
 			for j in range(self.map.size):
-				if self.map.list[j].occupy:
+				if not self.map.list[j].occupy:
 					dis = self.distance(self.obj_list.list[i], self.map.list[j])
 					if dis < min_dis:
 						index = j
@@ -87,7 +88,7 @@ class mapping():
 			index = self.matching[i]
 			if self.matching[i] != None:
 				# Kalman filter update position
-				pos, cov = self.kalman_filter(self.obj_list.list[i].position.x, self.obj_list.list[i].position.y)	
+				pos, cov = self.kalman_filter(self.obj_list.list[i].position.x, self.obj_list.list[i].position.y, index)	
 				self.map.list[index].position.x = pos[0]
 				self.map.list[index].position.y = pos[1]
 				self.map.list[index].covarianceX = cov[0][0]
@@ -103,27 +104,27 @@ class mapping():
 		self.map.size = len(self.map.list)
 
 
-	def kalman_filter(self, x, y):
+	def kalman_filter(self, x, y, index):
 		#======= Predict =======
-		if self.prior_mean == None:	# Recieve first measurement
+		'''if self.prior_mean == None:	# Recieve first measurement
 			self.prior_mean = np.array([x, y])		# State vector
-			self.prior_cov = self.pos_covariance		# Covariance matrix
+			self.prior_cov = self.pos_covariance		# Covariance matrix'''
+		prior_mean = np.array([self.map.list[index].position.x, self.map.list[index].position.y])
+		prior_cov = np.diag([3., 3.])
 		F = np.array([[1., 0], [0, 1.]])			# State transition matrix
-		predict_mean = np.dot(F, self.prior_mean)
-		predict_cov = np.dot(F, self.prior_cov).np.dot(F.T)
+		predict_mean = np.dot(F, prior_mean)
+		predict_cov = np.dot(F, prior_cov).dot(F.T)
 		#predict_pos = np.random.multivariate_normal(predict_mean, predict_cov, 100)
 
 		#======= Update step =======
 		z = np.array([x, y])				# Measurement
 		H = np.array([[1., 0]])				# Measurement function (Nothing to convert to measurement space)
 		R = np.array([[self.sensor_error]]) # Measurement covariance (For sensor)
-		S = np.dot(H, predict_cov).np.dot(H.T) + R 				# System uncertainty
-		K = np.dot(predict_cov, H.T).np.dot(np.linalg.inv(S))	# Kalman gain
+		S = np.dot(H, predict_cov).dot(H.T) + R 				# System uncertainty
+		K = np.dot(predict_cov, H.T).dot(np.linalg.inv(S))	# Kalman gain
 		residual = z - np.dot(H, predict_mean)					# Residual = measurement - prediction
-		posterior_mean = predict_mean + np.dot(K, residual)
+		posterior_mean = predict_mean + np.dot(K.T, residual)
 		posterior_cov = predict_cov - np.dot(K, H).dot(predict_cov)
-		self.prior_mean = posterior_mean
-		self.prior_cov = posterior_cov
 		return posterior_mean, posterior_cov
 
 	def distance(self, a, b): # caculate distance between two 3d points
