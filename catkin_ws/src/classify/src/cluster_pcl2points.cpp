@@ -20,6 +20,8 @@
 #include <robotx_msgs/ObstaclePoseList.h>
 #include <robotx_msgs/BoolStamped.h>
 #include <robotx_msgs/PCL_points.h>
+#include <robotx_msgs/ObjectPose.h>
+#include <robotx_msgs/ObjectPoseList.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
@@ -61,6 +63,7 @@ ros::Publisher pub_result;
 ros::Publisher pub_marker;
 ros::Publisher pub_marker_line;
 ros::Publisher pub_obstacle;
+ros::Publisher pub_object;
 ros::Publisher pub_points;
 
 //declare global variable
@@ -148,6 +151,7 @@ void cluster_pointcloud()
   int num_cluster = 0;
   int start_index = 0;
   robotx_msgs::ObstaclePoseList ob_list;
+  robotx_msgs::ObjectPoseList obj_list;
   robotx_msgs::PCL_points pcl_points;
 
   // Creating the KdTree object for the search method of the extraction
@@ -176,6 +180,7 @@ void cluster_pointcloud()
     float y_max_x = -10000;
     float y_max_y = -10000; 
     robotx_msgs::ObstaclePose ob_pose;
+    robotx_msgs::ObjectPose obj_pose;
     Eigen::Vector4f centroid;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
 
@@ -228,11 +233,19 @@ void cluster_pointcloud()
     //pub_2d_pcl.publish(*cloud);
 
     pcl::toROSMsg(*cloud_cluster, ros_cluster);
-    ob_pose.cloud = ros_cluster;
 
     //ob_pose.header.stamp = ros::Time::now();
+    obj_pose.header.stamp = pcl_t;
+    obj_pose.header.frame_id = cloud_in->header.frame_id;
+    obj_pose.position.x = centroid[0];
+    obj_pose.position.y = centroid[1];
+    obj_pose.position.z = centroid[2];
+    obj_pose.cloud = ros_cluster;
+    obj_list.list.push_back(obj_pose);
+
     ob_pose.header.stamp = pcl_t;
     ob_pose.header.frame_id = cloud_in->header.frame_id;
+    ob_pose.cloud = ros_cluster;
     ob_pose.x = centroid[0];
     ob_pose.y = centroid[1];
     ob_pose.z = centroid[2];
@@ -260,6 +273,11 @@ void cluster_pointcloud()
 
   //set obstacle list
   //ob_list.header.stamp = ros::Time::now();
+  obj_list.header.stamp = pcl_t;
+  obj_list.header.frame_id = cloud_in->header.frame_id;
+  obj_list.size = num_cluster;
+  pub_object.publish(obj_list);
+
   ob_list.header.stamp = pcl_t;
   ob_list.header.frame_id = cloud_in->header.frame_id;
   ob_list.size = num_cluster;
@@ -426,6 +444,7 @@ int main (int argc, char** argv)
   ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/velodyne_points", 1, callback);
   // Create a ROS publisher for the output point cloud
   pub_obstacle = nh.advertise< robotx_msgs::ObstaclePoseList > ("/obstacle_list", 10);
+  pub_object = nh.advertise< robotx_msgs::ObjectPoseList > ("/object_list", 10);
   pub_marker = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_marker", 1);
   pub_marker_line = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_marker_line", 1);
   pub_result = nh.advertise<sensor_msgs::PointCloud2> ("/cluster_result", 1);

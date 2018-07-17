@@ -5,25 +5,28 @@ from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import numpy as np
 
-class pcl2img():
+class mapping():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/obj_list", ObjectPoseList, call_back, queue_size=10)
+		rospy.Subscriber("/object_list", ObjectPoseList, self.call_back, queue_size=10)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
-		pub_obj = rospy.Publisher("/object_list/map", ObjectPoseList, queue_size=1)
+		self.pub_obj = rospy.Publisher("/object_list/map", ObjectPoseList, queue_size=1)
+		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Declare Variable ========
+		self.first = True
 		self.map = ObjectPoseList()
+		self.map.header.frame_id = "map"
 		self.obj_list = None
 		self.matching = []
-		self.r_threshold = 1
+		self.r_threshold = 5
 		self.prior_mean = None
 		self.prior_cov = None
 		self.covX = None
@@ -52,12 +55,15 @@ class pcl2img():
 				self.obj_list.header.frame_id = "map"
 			if self.first:
 				self.obj_list = self.map
+				self.first = False
 			else:
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
 				self.data_associate()
 				self.update_map()
-			pub_obj.publish(self.obj_list)
+			self.map.header.stamp = rospy.Time.now()
+			self.pub_obj.publish(self.map)
+			self.drawRviz(self.map)
 
 		except (LookupException, ConnectivityException, ExtrapolationException):
 			print "TF recieve error"
@@ -90,7 +96,7 @@ class pcl2img():
 				self.covY = cov[1][1]
 			else:
 				obj = ObjectPose()
-				obj.position = self.obj_list.list[i]
+				obj = self.obj_list.list[i]
 				obj.covarianceX = self.covX
 				obj.covarianceY = self.covY
 				self.map.list.append(obj)
@@ -122,6 +128,53 @@ class pcl2img():
 
 	def distance(self, a, b): # caculate distance between two 3d points
 		return math.sqrt((a.position.x-b.position.x)**2 + (a.position.y-b.position.y)**2 + (a.position.z-b.position.z)**2)
+
+	def drawRviz(self, obj_list):
+		marker_array = MarkerArray()
+		# marker_array.markers.resize(obj_list.size)
+		for i in range(obj_list.size):
+			marker = Marker()
+			marker.header.frame_id = obj_list.header.frame_id
+			marker.id = i
+			marker.header.stamp = rospy.Time.now()
+			marker.type = Marker.CUBE
+			marker.action = Marker.ADD
+			marker.lifetime = rospy.Duration(0.5)
+			marker.pose.position.x = obj_list.list[i].position.x
+			marker.pose.position.y = obj_list.list[i].position.y
+			marker.pose.position.z = obj_list.list[i].position.z
+			marker.pose.orientation.x = 0.0
+			marker.pose.orientation.y = 0.0
+			marker.pose.orientation.z = 0.0
+			marker.pose.orientation.w = 1.0
+			marker.scale.x = 1
+			marker.scale.y = 1
+			marker.scale.z = 1
+			if obj_list.list[i].type == "buoy":
+				marker.color.r = 0
+				marker.color.g = 0
+				marker.color.b = 1
+				marker.color.a = 0.5
+			elif obj_list.list[i].type == "totem":
+				marker.color.r = 0
+				marker.color.g = 1
+				marker.color.b = 0
+				marker.color.a = 0.5
+			elif obj_list.list[i].type == "dock":
+				marker.color.r = 1
+				marker.color.g = 1
+				marker.color.b = 1
+				marker.color.a = 0.5
+				marker.scale.x = 6
+				marker.scale.y = 6
+				marker.scale.z = 1
+			else:
+				marker.color.r = 1
+				marker.color.g = 0
+				marker.color.b = 0
+				marker.color.a = 0.5
+			marker_array.markers.append(marker)
+		self.pub_marker.publish(marker_array)
 
 if __name__ == "__main__":
 	rospy.init_node('mapping')
