@@ -4,6 +4,7 @@ from tf import TransformListener,TransformerROS
 from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
 import math
+import scipy.stats
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
 from visualization_msgs.msg import Marker, MarkerArray
@@ -27,11 +28,13 @@ class mapping():
 		self.map.header.frame_id = "map"
 		self.obj_list = None
 		self.matching = []
-		self.r_threshold = 3
+		self.r_threshold = 5
+		self.prob_threshold = 0.3
+		self.velodyne_range = 20.
 		self.prior_mean = None
 		self.prior_cov = None
-		self.covX = None
-		self.covY = None
+		self.covX = 5
+		self.covY = 5
 		# ======== Get from odometry =======
 		self.pos_covariance = np.diag([3., 3.])
 		self.sensor_error = 1.
@@ -41,6 +44,8 @@ class mapping():
 			rospy.loginfo("Process Object List")
 			self.obj_list = ObjectPoseList()
 			self.obj_list = msg
+			self.map_confidence = ObjectPoseList()
+			self.map_confidence.header.frame_id = "map"
 			self.matching = []
 			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
 			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
@@ -57,14 +62,28 @@ class mapping():
 			if self.first:
 				self.obj_list = self.map
 				self.first = False
+				for i in range(self.map.size):
+					self.map.list[i].occupy = False
+					self.map.list[i].covarianceX = self.covX
+					self.map.list[i].covarianceY = self.covY
 			else:
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
 				self.data_associate()
 				self.update_map()
 			self.map.header.stamp = rospy.Time.now()
+			for i in range(self.map.size):
+				mean = [self.map.list[i].position.x, self.map.list[i].position.y]
+				cov = [self.map.list[i].covarianceX, self.map.list[i].covarianceY]
+				prob = scipy.stats.multivariate_normal.pdf(mean, mean = mean, cov = cov)
+				print prob
+				if prob > self.prob_threshold:
+					self.map_confidence.list.append(self.map.list[i])
+			self.map_confidence.size = len(self.map_confidence.list)
+			self.map.header.stamp = rospy.Time.now()
+			self.map_confidence.header.stamp = rospy.Time.now()
 			self.pub_obj.publish(self.map)
-			self.drawRviz(self.map)
+			self.drawRviz(self.map_confidence)
 
 		except (LookupException, ConnectivityException, ExtrapolationException):
 			print "TF recieve error"
@@ -81,6 +100,8 @@ class mapping():
 						min_dis = dis
 			if min_dis < self.r_threshold:
 				self.map.list[index].occupy = True
+			else:
+				index = None
 			self.matching.append(index)
 
 	def update_map(self):
@@ -101,6 +122,11 @@ class mapping():
 				obj.covarianceX = self.covX
 				obj.covarianceY = self.covY
 				self.map.list.append(obj)
+		for j in range(self.map.size):
+			if not j in self.matching:
+				if self.distance_2_origin(self.map.list[j]) < self.velodyne_range:
+					self.map.list[j].covarianceX = self.map.list[j].covarianceX*1.5
+					self.map.list[j].covarianceY = self.map.list[j].covarianceY*1.5
 		self.map.size = len(self.map.list)
 
 
@@ -110,7 +136,8 @@ class mapping():
 			self.prior_mean = np.array([x, y])		# State vector
 			self.prior_cov = self.pos_covariance		# Covariance matrix'''
 		prior_mean = np.array([self.map.list[index].position.x, self.map.list[index].position.y])
-		prior_cov = np.diag([3., 3.])
+		#prior_cov = np.diag([0.5, 0.5])
+		prior_cov = np.diag([self.map.list[index].covarianceX, self.map.list[index].covarianceY])
 		F = np.array([[1., 0], [0, 1.]])			# State transition matrix
 		predict_mean = np.dot(F, prior_mean)
 		predict_cov = np.dot(F, prior_cov).dot(F.T)
@@ -129,6 +156,9 @@ class mapping():
 
 	def distance(self, a, b): # caculate distance between two 3d points
 		return math.sqrt((a.position.x-b.position.x)**2 + (a.position.y-b.position.y)**2 + (a.position.z-b.position.z)**2)
+
+	def distance_2_origin(self, p): # caculate distance between two 3d points
+		return math.sqrt((p.position.x)**2 + (p.position.y)**2 + (p.position.z)**2)
 
 	def drawRviz(self, obj_list):
 		marker_array = MarkerArray()
