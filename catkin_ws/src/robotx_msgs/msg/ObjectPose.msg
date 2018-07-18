@@ -1,8 +1,8 @@
 Header header
 geometry_msgs/Point position
 geometry_msgs/Quaternion orientation
-float64 covarianceX
-float64 covarianceY
+float64 varianceX
+float64 varianceY
 int32 matching_index
 bool occupy
 string type

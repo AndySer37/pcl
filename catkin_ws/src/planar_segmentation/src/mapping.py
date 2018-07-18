@@ -24,19 +24,23 @@ class mapping():
 
 		# ======== Declare Variable ========
 		self.first = True
+		self.robot_pose = None
 		self.map = ObjectPoseList()
-		self.map.header.frame_id = "map"
 		self.obj_list = None
 		self.matching = []
+		self.remove_list = []
+		self.remove_threshold = 0.05
 		self.r_threshold = 5
 		self.prob_threshold = 0.3
-		self.velodyne_range = 20.
+		self.velodyne_range = 30.
 		self.prior_mean = None
 		self.prior_cov = None
-		self.covX = 5
-		self.covY = 5
+		self.measurement_var = 1.
+		self.init_varX = 1.
+		self.init_varY = 1.
+		self.kernel = scipy.stats.norm(loc = 0, scale = 0.5)
 		# ======== Get from odometry =======
-		self.pos_covariance = np.diag([3., 3.])
+		#self.pos_covariance = np.diag([3., 3.])
 		self.sensor_error = 1.
 
 	def call_back(self, msg):
@@ -46,9 +50,12 @@ class mapping():
 			self.obj_list = msg
 			self.map_confidence = ObjectPoseList()
 			self.map_confidence.header.frame_id = "map"
+			self.map.header.frame_id = "map"
 			self.matching = []
+			self.remove_list = []
 			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
 			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
+			self.robot_pose = np.dot(transpose_matrix, [0, 0, 0, 1])
 			for obj_index in range(self.obj_list.size):
 				center_x = self.obj_list.list[obj_index].position.x
 				center_y = self.obj_list.list[obj_index].position.y
@@ -60,25 +67,32 @@ class mapping():
 				self.obj_list.list[obj_index].position.z = new_center[2]
 				self.obj_list.header.frame_id = "map"
 			if self.first:
-				self.obj_list = self.map
+				self.map = self.obj_list
 				self.first = False
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
-					self.map.list[i].covarianceX = self.covX
-					self.map.list[i].covarianceY = self.covY
+					self.map.list[i].varianceX = self.init_varX
+					self.map.list[i].varianceY = self.init_varY
 			else:
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
 				self.data_associate()
 				self.update_map()
+				for i in range(self.map.size):
+					mean_x, mean_y = self.map.list[i].position.x, self.map.list[i].position.y
+					var_x, var_y = self.map.list[i].varianceX, self.map.list[i].varianceY
+					prob_x = scipy.stats.norm(mean_x, var_x).pdf(mean_x)
+					prob_y = scipy.stats.norm(mean_y, var_y).pdf(mean_y)
+					print prob_x, prob_y
+					if prob_x > self.prob_threshold and prob_y > self.prob_threshold:
+						self.map_confidence.list.append(self.map.list[i])
+					elif prob_x < self.remove_threshold and prob_y < self.remove_threshold:
+						self.remove_list.append(i)
+				for i in self.remove_list:
+					del self.map.list[i]
+				self.map.size = len(self.map.list)
 			self.map.header.stamp = rospy.Time.now()
-			for i in range(self.map.size):
-				mean = [self.map.list[i].position.x, self.map.list[i].position.y]
-				cov = [self.map.list[i].covarianceX, self.map.list[i].covarianceY]
-				prob = scipy.stats.multivariate_normal.pdf(mean, mean = mean, cov = cov)
-				print prob
-				if prob > self.prob_threshold:
-					self.map_confidence.list.append(self.map.list[i])
+			print self.map.size
 			self.map_confidence.size = len(self.map_confidence.list)
 			self.map.header.stamp = rospy.Time.now()
 			self.map_confidence.header.stamp = rospy.Time.now()
@@ -109,35 +123,52 @@ class mapping():
 			index = self.matching[i]
 			if self.matching[i] != None:
 				# Kalman filter update position
-				pos, cov = self.kalman_filter(self.obj_list.list[i].position.x, self.obj_list.list[i].position.y, index)	
-				self.map.list[index].position.x = pos[0]
-				self.map.list[index].position.y = pos[1]
-				self.map.list[index].covarianceX = cov[0][0]
-				self.map.list[index].covarianceY = cov[1][1]
-				self.covX = cov[0][0]
-				self.covY = cov[1][1]
+				# ======= Kalman filter for x =======
+				prior_mean = self.map.list[index].position.x
+				prior_var = self.map.list[index].varianceX
+				z_mean = self.obj_list.list[i].position.x
+				z_var = self.measurement_var
+				x_mean, x_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
+				self.map.list[index].position.x = x_mean
+				self.map.list[index].varianceX = x_var
+				# ======= Kalman filter for y =======
+				prior_mean = self.map.list[index].position.y
+				prior_var = self.map.list[index].varianceY
+				z_mean = self.obj_list.list[i].position.y
+				z_var = self.measurement_var
+				y_mean, y_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
+				self.map.list[index].position.y = y_mean
+				self.map.list[index].varianceY = y_var
 			else:
 				obj = ObjectPose()
 				obj = self.obj_list.list[i]
-				obj.covarianceX = self.covX
-				obj.covarianceY = self.covY
+				obj.varianceX = self.init_varX
+				obj.varianceY = self.init_varY
 				self.map.list.append(obj)
 		for j in range(self.map.size):
 			if not j in self.matching:
-				if self.distance_2_origin(self.map.list[j]) < self.velodyne_range:
-					self.map.list[j].covarianceX = self.map.list[j].covarianceX*1.5
-					self.map.list[j].covarianceY = self.map.list[j].covarianceY*1.5
+				if self.distance_to_robot(self.map.list[j]) < self.velodyne_range:
+					print "Haha"
+					self.map.list[j].varianceX = self.map.list[j].varianceX*1.5
+					self.map.list[j].varianceY = self.map.list[j].varianceY*1.5
 		self.map.size = len(self.map.list)
 
+	def kalman_filter_1D(self, prior_mean, prior_var, z_mean, z_var):
+		#======= Predict =======
+		predict = scipy.stats.norm(loc = prior_mean + self.kernel.mean(), scale = np.sqrt(prior_var + self.kernel.var()))
+		#======= Update step =======
+		likelihood = scipy.stats.norm(loc = z_mean, scale = np.sqrt(z_var))
+		posterior = self.gaussian_multiply(likelihood, predict)
+		return posterior.mean(), posterior.var()
 
-	def kalman_filter(self, x, y, index):
+	def kalman_filter_2D(self, x, y, index):
 		#======= Predict =======
 		'''if self.prior_mean == None:	# Recieve first measurement
 			self.prior_mean = np.array([x, y])		# State vector
 			self.prior_cov = self.pos_covariance		# Covariance matrix'''
 		prior_mean = np.array([self.map.list[index].position.x, self.map.list[index].position.y])
 		#prior_cov = np.diag([0.5, 0.5])
-		prior_cov = np.diag([self.map.list[index].covarianceX, self.map.list[index].covarianceY])
+		prior_cov = np.diag([self.map.list[index].varianceX, self.map.list[index].varianceY])
 		F = np.array([[1., 0], [0, 1.]])			# State transition matrix
 		predict_mean = np.dot(F, prior_mean)
 		predict_cov = np.dot(F, prior_cov).dot(F.T)
@@ -154,11 +185,18 @@ class mapping():
 		posterior_cov = predict_cov - np.dot(K, H).dot(predict_cov)
 		return posterior_mean, posterior_cov
 
+	def gaussian_multiply(self, g1, g2):
+		g1_mean, g1_var = g1.stats(moments='mv')
+		g2_mean, g2_var = g1.stats(moments='mv')
+		mean = (g1_var * g2_mean + g2_var * g1_mean) / (g1_var + g2_var)
+		variance = (g1_var * g2_var) / (g1_var + g2_var)
+		return scipy.stats.norm(loc = mean, scale = np.sqrt(variance))
+
 	def distance(self, a, b): # caculate distance between two 3d points
 		return math.sqrt((a.position.x-b.position.x)**2 + (a.position.y-b.position.y)**2 + (a.position.z-b.position.z)**2)
 
-	def distance_2_origin(self, p): # caculate distance between two 3d points
-		return math.sqrt((p.position.x)**2 + (p.position.y)**2 + (p.position.z)**2)
+	def distance_to_robot(self, p): # caculate distance between two 3d points
+		return math.sqrt((p.position.x - self.robot_pose[0])**2 + (p.position.y - self.robot_pose[1])**2 + (p.position.z - self.robot_pose[2])**2)
 
 	def drawRviz(self, obj_list):
 		marker_array = MarkerArray()
