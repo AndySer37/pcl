@@ -1,3 +1,18 @@
+/**********************************
+Author: David Chen
+Date: 2018/06/01 
+Last update: 2018/07/22                                                              
+Point Cloud Clustering
+Subscribe: 
+  /velodyne_points      (sensor_msgs/PointCloud2)
+Publish:
+  /obstacle_list        (robotx_msgs/ObstaclePoseList)
+  /obj_list             (robotx_msgs/ObjectPoseList)
+  /obstacle_marker      (visualization_msgs/MarkerArray)
+  /obstacle_marker_line (visualization_msgs/MarkerArray)
+  /cluster_result       (sensor_msgs/PointCloud2)
+  /pcl_points           (robotx_msgs/PCL_points)
+***********************************/ 
 #include <ros/ros.h>
 #include <cmath>        // std::abs
 #include <sensor_msgs/PointCloud2.h>
@@ -28,6 +43,7 @@
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/Pose.h>
+#include <nav_msgs/Odometry.h>
 #include <std_msgs/ColorRGBA.h>
 #include <std_msgs/Time.h>
 #include <std_msgs/String.h>
@@ -43,7 +59,7 @@ using namespace message_filters;
 //define point cloud type
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;
-typedef boost::shared_ptr <robotx_msgs::BoolStamped const> BoolStampedConstPtr;
+//typedef boost::shared_ptr <nav_msgs::Odometry const> Odometry2ConstPtr;
 //declare point cloud
 PointCloudXYZ::Ptr cloud_inXYZ (new PointCloudXYZ);
 PointCloudXYZRGB::Ptr cloud_in (new PointCloudXYZRGB); 
@@ -57,6 +73,7 @@ PointCloudXYZRGB::Ptr cloud_scene(new PointCloudXYZRGB);
 PointCloudXYZRGB::Ptr result (new PointCloudXYZRGB);
 sensor_msgs::PointCloud2 ros_out;
 sensor_msgs::PointCloud2 ros_cluster;
+nav_msgs::Odometry odom;
 
 //declare ROS publisher
 ros::Publisher pub_result;
@@ -84,12 +101,13 @@ void cluster_pointcloud(void); //point cloud clustering
 void drawRviz(robotx_msgs::ObstaclePoseList); //draw marker in Rviz
 void drawRviz_line(robotx_msgs::ObstaclePoseList); //draw marker line list in Rviz
 
-//void callback(const sensor_msgs::PointCloud2ConstPtr& input, const robotx_msgs::BoolStampedConstPtr& tf_bool)
-void callback(const sensor_msgs::PointCloud2ConstPtr& input)
+//void callback(const sensor_msgs::PointCloud2ConstPtr& input)
+void callback(const sensor_msgs::PointCloud2ConstPtr& input, const nav_msgs::OdometryConstPtr& odom_msg)
 {
   if (!lock){
     lock = true;
     //covert from ros type to pcl type
+    odom = *odom_msg;
     pcl_frame_id.data = input->header.frame_id;
     pcl_t = input->header.stamp;
     pcl::fromROSMsg (*input, *cloud_inXYZ);
@@ -124,12 +142,12 @@ void cluster_pointcloud()
   out_filter.setStddevMulThresh (1.0);
   out_filter.filter (*cloud_filtered);*/
 
-  //========== Remove Higer and Lower Place ==========
-  pcl::ExtractIndices<pcl::PointXYZRGB> extract_h_l_place;
+  //========== Remove higer and lower place ==========
+  /*pcl::ExtractIndices<pcl::PointXYZRGB> extract_h_l_place;
   pcl::PointIndices::Ptr hl_indices (new pcl::PointIndices);
   for (int i = 0; i < cloud_filtered->points.size(); i++)
   {
-    if(cloud_filtered->points[i].y <=3.2 && cloud_filtered->points[i].y >= -3.5 && cloud_filtered->points[i].x >= -1.5 && cloud_filtered->points[i].x <= 1.5)
+    if (cloud_filtered->points[i].z >= high || cloud_filtered->points[i].z <= low)
     {
       hl_indices->indices.push_back(i);
     }
@@ -138,6 +156,22 @@ void cluster_pointcloud()
   extract_h_l_place.setIndices(hl_indices);
   extract_h_l_place.setNegative(true);
   extract_h_l_place.filter(*cloud_h);
+  *cloud_filtered = *cloud_h;*/
+
+  //========== Remove WAM-V Region ==========
+  pcl::ExtractIndices<pcl::PointXYZRGB> extract_WAMV;
+  pcl::PointIndices::Ptr hl_indices (new pcl::PointIndices);
+  for (int i = 0; i < cloud_filtered->points.size(); i++)
+  {
+    if(cloud_filtered->points[i].y <=3.2 && cloud_filtered->points[i].y >= -3.5 && cloud_filtered->points[i].x >= -1.5 && cloud_filtered->points[i].x <= 1.5)
+    {
+      hl_indices->indices.push_back(i);
+    }
+  }
+  extract_WAMV.setInputCloud(cloud_filtered);
+  extract_WAMV.setIndices(hl_indices);
+  extract_WAMV.setNegative(true);
+  extract_WAMV.filter(*cloud_h);
   *cloud_filtered = *cloud_h;
 
   //========== Downsample ==========
@@ -171,14 +205,14 @@ void cluster_pointcloud()
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
     // Declare variable
-    float x_min_x = 10000;
-    float x_min_y = 10000;
-    float y_min_x = 10000;
-    float y_min_y = 10000;
-    float x_max_x = -10000;
-    float x_max_y = -10000;
-    float y_max_x = -10000;
-    float y_max_y = -10000; 
+    float x_min_x = 10e5;
+    float x_min_y = 10e5;
+    float y_min_x = 10e5;
+    float y_min_y = 10e5;
+    float x_max_x = -10e5;
+    float x_max_y = -10e5;
+    float y_max_x = -10e5;
+    float y_max_y = -10e5; 
     robotx_msgs::ObstaclePose ob_pose;
     robotx_msgs::ObjectPose obj_pose;
     Eigen::Vector4f centroid;
@@ -234,8 +268,8 @@ void cluster_pointcloud()
 
     pcl::toROSMsg(*cloud_cluster, ros_cluster);
 
-    //ob_pose.header.stamp = ros::Time::now();
     obj_pose.header.stamp = pcl_t;
+    //obj_pose.header.stamp = ros::Time::now();
     obj_pose.header.frame_id = cloud_in->header.frame_id;
     obj_pose.position.x = centroid[0];
     obj_pose.position.y = centroid[1];
@@ -244,6 +278,7 @@ void cluster_pointcloud()
     obj_list.list.push_back(obj_pose);
 
     ob_pose.header.stamp = pcl_t;
+    //ob_pose.header.stamp = ros::Time::now();
     ob_pose.header.frame_id = cloud_in->header.frame_id;
     ob_pose.cloud = ros_cluster;
     ob_pose.x = centroid[0];
@@ -272,26 +307,31 @@ void cluster_pointcloud()
   }
 
   //set obstacle list
-  //ob_list.header.stamp = ros::Time::now();
   obj_list.header.stamp = pcl_t;
+  //obj_list.header.stamp = ros::Time::now();
   obj_list.header.frame_id = cloud_in->header.frame_id;
   obj_list.size = num_cluster;
   pub_object.publish(obj_list);
 
   ob_list.header.stamp = pcl_t;
+  //ob_list.header.stamp = ros::Time::now();
   ob_list.header.frame_id = cloud_in->header.frame_id;
   ob_list.size = num_cluster;
   pub_obstacle.publish(ob_list);
-  //pcl_points.header.stamp = ros::Time::now();
+
+  pcl_points.varianceX = odom.pose.covariance[0];
+  pcl_points.varianceY = odom.pose.covariance[7];
   pcl_points.header.stamp = pcl_t;
+  //pcl_points.header.stamp = ros::Time::now();
   pcl_points.header.frame_id = cloud_in->header.frame_id;
   pub_points.publish(pcl_points);
   drawRviz(ob_list);
   drawRviz_line(ob_list);
+
   result->header.frame_id = cloud_in->header.frame_id;
   pcl::toROSMsg(*result, ros_out);
-  //ros_out.header.stamp = ros::Time::now();
   ros_out.header.stamp = pcl_t;
+  //ros_out.header.stamp = ros::Time::now();
   pub_result.publish(ros_out);
   lock = false;
   result->clear();
@@ -433,18 +473,18 @@ int main (int argc, char** argv)
   ros::init (argc, argv, "cluster_extraction");
   ros::NodeHandle nh;
   tf::TransformListener listener(ros::Duration(1.0));
+  std::cout<< "Start Clustering Node" << std::endl;
+  //ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/velodyne_points", 1, callback);
   // Create a ROS subscriber for the input point cloud
-  /*message_filters::Subscriber<sensor_msgs::PointCloud2> pcl_sub(nh, "/velodyne_points", 1);
-  message_filters::Subscriber<robotx_msgs::BoolStamped> bool_sub(nh, "/tf_transform", 1);
-  typedef sync_policies::ApproximateTime<sensor_msgs::PointCloud2, robotx_msgs::BoolStamped> MySyncPolicy;
+  message_filters::Subscriber<sensor_msgs::PointCloud2> pcl_sub(nh, "/velodyne_points", 10);
+  message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "/odometry/filtered", 10);
+  typedef sync_policies::ApproximateTime<sensor_msgs::PointCloud2, nav_msgs::Odometry> MySyncPolicy;
   // ApproximateTime takes a queue size as its constructor argument, hence MySyncPolicy(10)
-  Synchronizer<MySyncPolicy> sync(MySyncPolicy(1), pcl_sub, bool_sub);
-  sync.registerCallback(boost::bind(&callback, _1, _2));*/
-
-  ros::Subscriber sub = nh.subscribe<sensor_msgs::PointCloud2> ("/velodyne_points", 1, callback);
+  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), pcl_sub, odom_sub);
+  sync.registerCallback(boost::bind(&callback, _1, _2));
   // Create a ROS publisher for the output point cloud
   pub_obstacle = nh.advertise< robotx_msgs::ObstaclePoseList > ("/obstacle_list", 10);
-  pub_object = nh.advertise< robotx_msgs::ObjectPoseList > ("/object_list", 10);
+  pub_object = nh.advertise< robotx_msgs::ObjectPoseList > ("/obj_list", 10);
   pub_marker = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_marker", 1);
   pub_marker_line = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_marker_line", 1);
   pub_result = nh.advertise<sensor_msgs::PointCloud2> ("/cluster_result", 1);

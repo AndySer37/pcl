@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import rospy
-from tf import TransformListener,TransformerROS
+from tf import TransformListener,TransformerROS, transformations
 from tf import LookupException, ConnectivityException, ExtrapolationException
 import roslib
 import math
 import scipy.stats
+from message_filters import ApproximateTimeSynchronizer, TimeSynchronizer, Subscriber
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
 from visualization_msgs.msg import Marker, MarkerArray
@@ -14,12 +16,16 @@ import numpy as np
 class mapping():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/obj_list/classify", ObjectPoseList, self.call_back, queue_size=10)
+		odom_sub = Subscriber("/odometry/filtered", Odometry)
+		obj_sub = Subscriber("/obj_list/classify", ObjectPoseList)
+		ats = ApproximateTimeSynchronizer((odom_sub, obj_sub),queue_size = 1, slop = 0.1)
+		ats.registerCallback(self.call_back)
+		#rospy.Subscriber("/object_list", ObjectPoseList, self.call_back, queue_size=10)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
-		self.pub_obj = rospy.Publisher("/object_list/map", ObjectPoseList, queue_size=1)
-		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
+		self.pub_obj = rospy.Publisher("/obj_list/classify/map", ObjectPoseList, queue_size=1)
+		self.pub_marker = rospy.Publisher("/obj_classify/map", MarkerArray, queue_size = 1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Declare Variable ========
@@ -27,6 +33,7 @@ class mapping():
 		self.robot_pose = None
 		self.map = ObjectPoseList()
 		self.obj_list = None
+		self.frame_id = "odom"
 		self.matching = []
 		self.remove_list = []
 		self.remove_threshold = 0.05
@@ -40,67 +47,68 @@ class mapping():
 		self.init_varY = 1.
 		self.kernel = scipy.stats.norm(loc = 0, scale = 0.5)
 		# ======== Get from odometry =======
-		#self.pos_covariance = np.diag([3., 3.])
 		self.sensor_error = 1.
 
-	def call_back(self, msg):
-		try:
-			rospy.loginfo("Process Object List")
-			self.obj_list = ObjectPoseList()
-			self.obj_list = msg
-			self.map_confidence = ObjectPoseList()
-			self.map_confidence.header.frame_id = "map"
-			self.map.header.frame_id = "map"
-			self.matching = []
-			self.remove_list = []
-			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
-			transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
-			self.robot_pose = np.dot(transpose_matrix, [0, 0, 0, 1])
-			for obj_index in range(self.obj_list.size):
-				center_x = self.obj_list.list[obj_index].position.x
-				center_y = self.obj_list.list[obj_index].position.y
-				center_z = self.obj_list.list[obj_index].position.z
-				center  = np.array([center_x, center_y, center_z, 1])
-				new_center = np.dot(transpose_matrix, center)
-				self.obj_list.list[obj_index].position.x = new_center[0]
-				self.obj_list.list[obj_index].position.y = new_center[1]
-				self.obj_list.list[obj_index].position.z = new_center[2]
-				self.obj_list.header.frame_id = "map"
-			if self.first:
-				self.map = self.obj_list
-				self.first = False
-				for i in range(self.map.size):
-					self.map.list[i].occupy = False
-					self.map.list[i].varianceX = self.init_varX
-					self.map.list[i].varianceY = self.init_varY
-			else:
-				for i in range(self.map.size):
-					self.map.list[i].occupy = False
-				self.data_associate()
-				self.update_map()
-				for i in range(self.map.size):
-					mean_x, mean_y = self.map.list[i].position.x, self.map.list[i].position.y
-					var_x, var_y = self.map.list[i].varianceX, self.map.list[i].varianceY
-					prob_x = scipy.stats.norm(mean_x, var_x).pdf(mean_x)
-					prob_y = scipy.stats.norm(mean_y, var_y).pdf(mean_y)
-					print prob_x, prob_y
-					if prob_x > self.prob_threshold and prob_y > self.prob_threshold:
-						self.map_confidence.list.append(self.map.list[i])
-					elif prob_x < self.remove_threshold and prob_y < self.remove_threshold:
-						self.remove_list.append(i)
-				for i in self.remove_list:
-					del self.map.list[i]
-				self.map.size = len(self.map.list)
-			self.map.header.stamp = rospy.Time.now()
-			print self.map.size
-			self.map_confidence.size = len(self.map_confidence.list)
-			self.map.header.stamp = rospy.Time.now()
-			self.map_confidence.header.stamp = rospy.Time.now()
-			self.pub_obj.publish(self.map)
-			self.drawRviz(self.map_confidence)
-
-		except (LookupException, ConnectivityException, ExtrapolationException):
-			print "TF recieve error"
+	def call_back(self, odom_msg, obj_msg):
+		rospy.loginfo("Process Object List")
+		self.obj_list = ObjectPoseList()
+		self.obj_list = obj_msg
+		self.map_confidence = ObjectPoseList()
+		self.map_confidence.header.frame_id = self.frame_id
+		self.map.header.frame_id = self.frame_id
+		self.matching = []
+		self.remove_list = []
+		vlp2robot = transformations.quaternion_from_euler(0, 0, np.pi)
+		vlp2robot_matrix = transformer.fromTranslationRotation([0, 0, 0], vlp2robot)
+		position = [odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, odom_msg.pose.pose.position.z]
+		quaternion = [odom_msg.pose.pose.orientation.x, odom_msg.pose.pose.orientation.y, odom_msg.pose.pose.orientation.z, odom_msg.pose.pose.orientation.w]
+		transpose_matrix = transformer.fromTranslationRotation(position, quaternion)
+		self.robot_pose = np.dot(transpose_matrix, [0, 0, 0, 1])
+		for obj_index in range(self.obj_list.size):
+			center_x = self.obj_list.list[obj_index].position.x
+			center_y = self.obj_list.list[obj_index].position.y
+			center_z = self.obj_list.list[obj_index].position.z
+			center  = np.array([center_x, center_y, center_z, 1])
+			robot_scene = np.dot(vlp2robot_matrix, center)
+			new_center = np.dot(transpose_matrix, robot_scene)
+			self.obj_list.list[obj_index].position.x = new_center[0]
+			self.obj_list.list[obj_index].position.y = new_center[1]
+			self.obj_list.list[obj_index].position.z = new_center[2]
+			self.obj_list.list[obj_index].varianceX = odom_msg.pose.covariance[0]
+			self.obj_list.list[obj_index].varianceY = odom_msg.pose.covariance[7]
+			self.obj_list.header.frame_id = self.frame_id
+		if self.first:
+			self.map = self.obj_list
+			self.first = False
+			for i in range(self.map.size):
+				self.map.list[i].occupy = False
+				#self.map.list[i].varianceX = self.init_varX
+				#self.map.list[i].varianceY = self.init_varY
+		else:
+			for i in range(self.map.size):
+				self.map.list[i].occupy = False
+			self.data_associate()
+			self.update_map()
+			for i in range(self.map.size):
+				mean_x, mean_y = self.map.list[i].position.x, self.map.list[i].position.y
+				var_x, var_y = self.map.list[i].varianceX, self.map.list[i].varianceY
+				prob_x = scipy.stats.norm(mean_x, var_x).pdf(mean_x)
+				prob_y = scipy.stats.norm(mean_y, var_y).pdf(mean_y)
+				print prob_x, prob_y
+				if prob_x > self.prob_threshold and prob_y > self.prob_threshold:
+					self.map_confidence.list.append(self.map.list[i])
+				elif prob_x < self.remove_threshold and prob_y < self.remove_threshold:
+					self.remove_list.append(i)
+			for i in self.remove_list:
+				del self.map.list[i]
+			self.map.size = len(self.map.list)
+		self.map.header.stamp = rospy.Time.now()
+		print self.map.size
+		self.map_confidence.size = len(self.map_confidence.list)
+		self.map.header.stamp = rospy.Time.now()
+		self.map_confidence.header.stamp = rospy.Time.now()
+		self.pub_obj.publish(self.map)
+		self.drawRviz(self.map_confidence)
 
 	def data_associate(self):
 		for i in range(self.obj_list.size):
@@ -142,8 +150,8 @@ class mapping():
 			else:
 				obj = ObjectPose()
 				obj = self.obj_list.list[i]
-				obj.varianceX = self.init_varX
-				obj.varianceY = self.init_varY
+				#obj.varianceX = self.init_varX
+				#obj.varianceY = self.init_varY
 				self.map.list.append(obj)
 		for j in range(self.map.size):
 			if not j in self.matching:
@@ -253,4 +261,4 @@ if __name__ == "__main__":
 	tf_ = TransformListener()
 	transformer = TransformerROS()
 	foo = mapping()
-rospy.spin()
+	rospy.spin()

@@ -21,12 +21,12 @@ sys.path.insert(0, caffe_root + '/caffe/python')
 import caffe
 import os
 
-class pcl2img():
+class classify_pcl():
 	def __init__(self):
 		self.node_name = rospy.get_name()
 		rospy.loginfo("[%s] Initializing " %(self.node_name))
 		rospy.Subscriber('/pcl_points', PCL_points, self.call_back)
-		self.pub_obj = rospy.Publisher("obj_list", ObjectPoseList, queue_size = 1)
+		self.pub_obj = rospy.Publisher("/obj_list/classify", ObjectPoseList, queue_size = 1)
 		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.boundary = 50
@@ -116,6 +116,8 @@ class pcl2img():
 			obj.position.x = msg.centroids[i].x
 			obj.position.y = msg.centroids[i].y
 			obj.position.z = msg.centroids[i].z
+			obj.varianceX = msg.varianceX
+			obj.varianceY = msg.varianceY
 			obj.type = model_type
 			obj_list.list.append(obj)
 			#cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
@@ -242,6 +244,6 @@ class pcl2img():
 		self.pub_marker.publish(marker_array)
 
 if __name__ == '__main__':
-	rospy.init_node('pcl2img')
-	foo = pcl2img()
+	rospy.init_node('classify_pcl')
+	foo = classify_pcl()
 	rospy.spin()

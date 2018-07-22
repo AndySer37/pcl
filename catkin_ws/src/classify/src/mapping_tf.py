@@ -18,8 +18,8 @@ class mapping():
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
-		self.pub_obj = rospy.Publisher("/object_list/map", ObjectPoseList, queue_size=1)
-		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
+		self.pub_obj = rospy.Publisher("/obj_list/classify/map", ObjectPoseList, queue_size=1)
+		self.pub_marker = rospy.Publisher("/obj_classify/map", MarkerArray, queue_size = 1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Declare Variable ========
@@ -27,6 +27,7 @@ class mapping():
 		self.robot_pose = None
 		self.map = ObjectPoseList()
 		self.obj_list = None
+		self.frame_id = "map"
 		self.matching = []
 		self.remove_list = []
 		self.remove_threshold = 0.05
@@ -49,8 +50,8 @@ class mapping():
 			self.obj_list = ObjectPoseList()
 			self.obj_list = msg
 			self.map_confidence = ObjectPoseList()
-			self.map_confidence.header.frame_id = "map"
-			self.map.header.frame_id = "map"
+			self.map_confidence.header.frame_id = self.frame_id
+			self.map.header.frame_id = self.frame_id
 			self.matching = []
 			self.remove_list = []
 			position, quaternion = tf_.lookupTransform( "/map", "/velodyne",rospy.Time(0))
@@ -65,14 +66,14 @@ class mapping():
 				self.obj_list.list[obj_index].position.x = new_center[0]
 				self.obj_list.list[obj_index].position.y = new_center[1]
 				self.obj_list.list[obj_index].position.z = new_center[2]
-				self.obj_list.header.frame_id = "map"
+				self.obj_list.header.frame_id = self.frame_id
 			if self.first:
 				self.map = self.obj_list
 				self.first = False
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
-					self.map.list[i].varianceX = self.init_varX
-					self.map.list[i].varianceY = self.init_varY
+					#self.map.list[i].varianceX = self.init_varX
+					#self.map.list[i].varianceY = self.init_varY
 			else:
 				for i in range(self.map.size):
 					self.map.list[i].occupy = False
@@ -83,7 +84,7 @@ class mapping():
 					var_x, var_y = self.map.list[i].varianceX, self.map.list[i].varianceY
 					prob_x = scipy.stats.norm(mean_x, var_x).pdf(mean_x)
 					prob_y = scipy.stats.norm(mean_y, var_y).pdf(mean_y)
-					print prob_x, prob_y
+					#print prob_x, prob_y
 					if prob_x > self.prob_threshold and prob_y > self.prob_threshold:
 						self.map_confidence.list.append(self.map.list[i])
 					elif prob_x < self.remove_threshold and prob_y < self.remove_threshold:
@@ -92,7 +93,7 @@ class mapping():
 					del self.map.list[i]
 				self.map.size = len(self.map.list)
 			self.map.header.stamp = rospy.Time.now()
-			print self.map.size
+			#print self.map.size
 			self.map_confidence.size = len(self.map_confidence.list)
 			self.map.header.stamp = rospy.Time.now()
 			self.map_confidence.header.stamp = rospy.Time.now()
@@ -142,15 +143,14 @@ class mapping():
 			else:
 				obj = ObjectPose()
 				obj = self.obj_list.list[i]
-				obj.varianceX = self.init_varX
-				obj.varianceY = self.init_varY
+				#obj.varianceX = self.init_varX
+				#obj.varianceY = self.init_varY
 				self.map.list.append(obj)
 		for j in range(self.map.size):
 			if not j in self.matching:
 				if self.distance_to_robot(self.map.list[j]) < self.velodyne_range:
-					print "Haha"
-					self.map.list[j].varianceX = self.map.list[j].varianceX*1.5
-					self.map.list[j].varianceY = self.map.list[j].varianceY*1.5
+					self.map.list[j].varianceX = self.map.list[j].varianceX*1.2
+					self.map.list[j].varianceY = self.map.list[j].varianceY*1.2
 		self.map.size = len(self.map.list)
 
 	def kalman_filter_1D(self, prior_mean, prior_var, z_mean, z_var):
@@ -201,14 +201,16 @@ class mapping():
 	def drawRviz(self, obj_list):
 		marker_array = MarkerArray()
 		# marker_array.markers.resize(obj_list.size)
+		print obj_list.size
 		for i in range(obj_list.size):
+			#print obj_list.list[i].varianceX, obj_list.list[i].varianceY
 			marker = Marker()
 			marker.header.frame_id = obj_list.header.frame_id
 			marker.id = i
 			marker.header.stamp = rospy.Time.now()
 			marker.type = Marker.CUBE
 			marker.action = Marker.ADD
-			marker.lifetime = rospy.Duration(0.5)
+			marker.lifetime = rospy.Duration(3)
 			marker.pose.position.x = obj_list.list[i].position.x
 			marker.pose.position.y = obj_list.list[i].position.y
 			marker.pose.position.z = obj_list.list[i].position.z
@@ -242,6 +244,9 @@ class mapping():
 				marker.color.g = 0
 				marker.color.b = 0
 				marker.color.a = 0.5
+				marker.scale.x = 2
+				marker.scale.y = 2
+				marker.scale.z = 2
 			marker_array.markers.append(marker)
 		self.pub_marker.publish(marker_array)
 
