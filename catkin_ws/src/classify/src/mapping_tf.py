@@ -14,13 +14,16 @@ import numpy as np
 class mapping():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/obj_list/classify", ObjectPoseList, self.call_back, queue_size=10)
+		rospy.Subscriber("/obj_list/classify", ObjectPoseList, self.call_back, queue_size=1)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
 		self.pub_obj = rospy.Publisher("/obj_list/classify/map", ObjectPoseList, queue_size=1)
 		self.pub_marker = rospy.Publisher("/obj_classify/map", MarkerArray, queue_size = 1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
+
+		# ======== Get ROS parameter ========
+		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
 		self.first = True
@@ -33,9 +36,13 @@ class mapping():
 		self.remove_threshold = 0.05
 		self.r_threshold = 5
 		self.prob_threshold = 0.3
-		self.velodyne_range = 30.
+		self.update_range = 40.
+		self.punish_range = 20.
+		self.classify_range = 10.
 		self.prior_mean = None
 		self.prior_cov = None
+		self.punish_no_detect = 2
+		self.punish_unclassify = 1.5
 		self.measurement_var = 1.
 		self.init_varX = 1.
 		self.init_varY = 1.
@@ -89,11 +96,12 @@ class mapping():
 						self.map_confidence.list.append(self.map.list[i])
 					elif prob_x < self.remove_threshold and prob_y < self.remove_threshold:
 						self.remove_list.append(i)
+				remove_num = 0	#ensure the index are correct during removing
 				for i in self.remove_list:
-					del self.map.list[i]
+					del self.map.list[i - remove_num]
+					remove_num = remove_num + 1
 				self.map.size = len(self.map.list)
 			self.map.header.stamp = rospy.Time.now()
-			#print self.map.size
 			self.map_confidence.size = len(self.map_confidence.list)
 			self.map.header.stamp = rospy.Time.now()
 			self.map_confidence.header.stamp = rospy.Time.now()
@@ -104,15 +112,28 @@ class mapping():
 			print "TF recieve error"
 
 	def data_associate(self):
+		'''self.matching = [None]*self.obj_list.size
+		for i in range(self.map.size):
+			min_dis = 10e5
+			index = None
+			for j in range(self.obj_list.size):
+				dis = self.distance(self.map.list[i], self.obj_list.list[j])
+				if dis < min_dis:
+					index = j
+					min_dis = dis
+			if min_dis < self.r_threshold:
+				self.matching[index] = i
+		print self.matching'''
 		for i in range(self.obj_list.size):
 			min_dis = 10e5
 			index = None
 			for j in range(self.map.size):
-				if not self.map.list[j].occupy:
-					dis = self.distance(self.obj_list.list[i], self.map.list[j])
-					if dis < min_dis:
-						index = j
-						min_dis = dis
+				if self.map.list[j].type == self.obj_list.list[i].type:
+					if not self.map.list[j].occupy:
+						dis = self.distance(self.obj_list.list[i], self.map.list[j])
+						if dis < min_dis:
+							index = j
+							min_dis = dis
 			if min_dis < self.r_threshold:
 				self.map.list[index].occupy = True
 			else:
@@ -122,35 +143,36 @@ class mapping():
 	def update_map(self):
 		for i in range(self.obj_list.size):
 			index = self.matching[i]
-			if self.matching[i] != None:
-				# Kalman filter update position
-				# ======= Kalman filter for x =======
-				prior_mean = self.map.list[index].position.x
-				prior_var = self.map.list[index].varianceX
-				z_mean = self.obj_list.list[i].position.x
-				z_var = self.measurement_var
-				x_mean, x_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
-				self.map.list[index].position.x = x_mean
-				self.map.list[index].varianceX = x_var
-				# ======= Kalman filter for y =======
-				prior_mean = self.map.list[index].position.y
-				prior_var = self.map.list[index].varianceY
-				z_mean = self.obj_list.list[i].position.y
-				z_var = self.measurement_var
-				y_mean, y_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
-				self.map.list[index].position.y = y_mean
-				self.map.list[index].varianceY = y_var
-			else:
-				obj = ObjectPose()
-				obj = self.obj_list.list[i]
-				#obj.varianceX = self.init_varX
-				#obj.varianceY = self.init_varY
-				self.map.list.append(obj)
+			if self.distance_to_robot(self.obj_list.list[i]) < self.update_range:
+				if index != None:
+					# Kalman filter update position
+					# ======= Kalman filter for x =======
+					prior_mean = self.map.list[index].position.x
+					prior_var = self.map.list[index].varianceX
+					z_mean = self.obj_list.list[i].position.x
+					z_var = self.measurement_var
+					x_mean, x_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
+					self.map.list[index].position.x = x_mean
+					self.map.list[index].varianceX = x_var
+					# ======= Kalman filter for y =======
+					prior_mean = self.map.list[index].position.y
+					prior_var = self.map.list[index].varianceY
+					z_mean = self.obj_list.list[i].position.y
+					z_var = self.measurement_var
+					y_mean, y_var = self.kalman_filter_1D(prior_mean, prior_var, z_mean, z_var)
+					self.map.list[index].position.y = y_mean
+					self.map.list[index].varianceY = y_var
+				else:
+					obj = ObjectPose()
+					obj = self.obj_list.list[i]
+					#obj.varianceX = self.init_varX
+					#obj.varianceY = self.init_varY
+					self.map.list.append(obj)
 		for j in range(self.map.size):
 			if not j in self.matching:
-				if self.distance_to_robot(self.map.list[j]) < self.velodyne_range:
-					self.map.list[j].varianceX = self.map.list[j].varianceX*1.2
-					self.map.list[j].varianceY = self.map.list[j].varianceY*1.2
+				if self.distance_to_robot(self.map.list[j]) < self.punish_range:
+					self.map.list[j].varianceX = self.map.list[j].varianceX*self.punish_no_detect
+					self.map.list[j].varianceY = self.map.list[j].varianceY*self.punish_no_detect
 		self.map.size = len(self.map.list)
 
 	def kalman_filter_1D(self, prior_mean, prior_var, z_mean, z_var):
