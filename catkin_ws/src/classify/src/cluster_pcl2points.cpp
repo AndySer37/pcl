@@ -5,6 +5,7 @@ Last update: 2018/07/22
 Point Cloud Clustering
 Subscribe: 
   /velodyne_points      (sensor_msgs/PointCloud2)
+
 Publish:
   /obstacle_list        (robotx_msgs/ObstaclePoseList)
   /obj_list             (robotx_msgs/ObjectPoseList)
@@ -33,7 +34,6 @@ Publish:
 #include <pcl/segmentation/extract_clusters.h>
 #include <robotx_msgs/ObstaclePose.h>
 #include <robotx_msgs/ObstaclePoseList.h>
-#include <robotx_msgs/BoolStamped.h>
 #include <robotx_msgs/PCL_points.h>
 #include <robotx_msgs/ObjectPose.h>
 #include <robotx_msgs/ObjectPoseList.h>
@@ -59,7 +59,6 @@ using namespace message_filters;
 //define point cloud type
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;
-//typedef boost::shared_ptr <nav_msgs::Odometry const> Odometry2ConstPtr;
 //declare point cloud
 PointCloudXYZ::Ptr cloud_inXYZ (new PointCloudXYZ);
 PointCloudXYZRGB::Ptr cloud_in (new PointCloudXYZRGB); 

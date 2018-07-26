@@ -192,7 +192,7 @@ void cluster_pointcloud()
   // Create cluster object
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-  ec.setClusterTolerance (2.2);// unit: meter
+  ec.setClusterTolerance (3);// unit: meter
   ec.setMinClusterSize (3);
   ec.setMaxClusterSize (100000);
   ec.setSearchMethod (tree);

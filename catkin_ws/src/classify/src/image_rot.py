@@ -64,12 +64,13 @@ class pcl2img():
 				plane_yz.append([tf_points.list[i].poses[j].position.y, tf_points.list[i].poses[j].position.z])
 				plane_xz.append([tf_points.list[i].poses[j].position.x, tf_points.list[i].poses[j].position.z])
 			self.toIMG(pcl_size, plane_xy, 'xy')
-			self.toIMG(pcl_size, plane_yz, 'yz')
-			self.toIMG(pcl_size, plane_xz, 'xz')
+			#self.toIMG(pcl_size, plane_yz, 'yz')
+			#self.toIMG(pcl_size, plane_xz, 'xz')
 			#cv2.imwrite( "Image.jpg", self.image)
 			cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
 			self.index = self.index + 1
 			print "Save image"
+		rospy.sleep(0.6)
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_m = 10e5
@@ -113,11 +114,11 @@ class pcl2img():
 			for m in range(-self.point_size, self.point_size + 1):
 				for n in range(-self.point_size, self.point_size + 1):
 					img[pcl_array[i][0] + m  , pcl_array[i][1] + n] = (0,255,255)
-					if plane == 'xy':
+					if plane == 'xz':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][0] = 255
 					elif plane == 'yz':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][1] = 255
-					elif plane == 'xz':
+					elif plane == 'xy':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][2] = 255
 		#cv2.imwrite( "Image_" + plane + ".jpg", img )
 

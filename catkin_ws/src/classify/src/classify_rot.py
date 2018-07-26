@@ -169,11 +169,11 @@ class classify_pcl():
 			for m in range(-self.point_size, self.point_size + 1):
 				for n in range(-self.point_size, self.point_size + 1):
 					img[pcl_array[i][0] + m  , pcl_array[i][1] + n] = (0,255,255)
-					if plane == 'xy':
+					if plane == 'xz':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][0] = 255
 					elif plane == 'yz':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][1] = 255
-					elif plane == 'xz':
+					elif plane == 'xy':
 						self.image[pcl_array[i][0] + m  , pcl_array[i][1] + n][2] = 255
 		#cv2.imwrite( "Image_" + plane + ".jpg", img )
 
