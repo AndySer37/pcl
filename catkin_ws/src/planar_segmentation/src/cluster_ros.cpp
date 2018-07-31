@@ -160,7 +160,7 @@ void cluster_pointcloud()
   pcl::PointIndices::Ptr hl_indices (new pcl::PointIndices);
   for (int i = 0; i < cloud_filtered->points.size(); i++)
   {
-    if(cloud_filtered->points[i].y <=3.2 && cloud_filtered->points[i].y >= -3.5 && cloud_filtered->points[i].x >= -1.5 && cloud_filtered->points[i].x <= 1.5)
+    if(cloud_filtered->points[i].y <=1.5 && cloud_filtered->points[i].y >= -1.5 && cloud_filtered->points[i].x >= -3.5 && cloud_filtered->points[i].x <= 3.5)
     {
       hl_indices->indices.push_back(i);
     }
