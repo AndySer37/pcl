@@ -88,6 +88,8 @@ class pcl2img():
 				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", img)
 			except CvBridgeError as e:
 				print (e)
+				black_img = np.zeros((self.height, self.width, 3), np.uint8)
+				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", black_img)
 		else:
 			print "No camera image, fill with black image!!!"
 			black_img = np.zeros((self.height, self.width, 3), np.uint8)
