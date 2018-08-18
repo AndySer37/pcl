@@ -63,7 +63,7 @@ class classify_pcl():
 		# ***************************************************************
 
 		self.model_def = self.model_Base_Dir + self.model_name.lower() + '.prototxt'
-		self.model_weights = self.model_Base_Dir + self.model_name.lower() + '_cartesian.caffemodel'
+		self.model_weights = self.model_Base_Dir + self.model_name.lower() + '_rot.caffemodel'
 		self.net = caffe.Net(	self.model_def,        # defines the structure of the model
 								self.model_weights,    # contains the trained weights
 								caffe.TEST)
