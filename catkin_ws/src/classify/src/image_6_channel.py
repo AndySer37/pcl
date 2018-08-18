@@ -14,6 +14,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from robotx_msgs.msg import PCL_points, ObjectPose, ObjectPoseList
 import rospkg
 from cv_bridge import CvBridge, CvBridgeError
+from PIL import Image
 
 
 class pcl2img():
@@ -25,7 +26,8 @@ class pcl2img():
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.bridge = CvBridge()
 		self.boundary = 50
-		self.height = self.width = 480.0
+		self.height = 480
+		self.width = 480
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 		self.index = 0
@@ -79,16 +81,34 @@ class pcl2img():
 		rospy.sleep(0.6)
 
 	def get_roi_image(self, ros_img):
-		print ros_img.encoding
-		print ros_img.height, ros_img.width
-		if ros_img != None:
+		if ros_img != None and ros_img.height != 0 and ros_img.width!=0:
 			try:
 				cv_image = self.bridge.imgmsg_to_cv2(ros_img, "bgr8")
-				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", cv_image)
+				img = self.resize_keep_ratio(cv_image, self.width, self.height)
+				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", img)
 			except CvBridgeError as e:
 				print (e)
 		else:
-			print "Please don't print this"
+			print "No camera image, fill with black image!!!"
+			black_img = np.zeros((self.height, self.width, 3), np.uint8)
+			cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", black_img)
+
+	def resize_keep_ratio(self, img, width, height, fill_color=(0, 0, 0, 0)):
+		#======= Make sure image is smaller than background =======
+		h, w, channel = img.shape
+		h_ratio = float(float(height)/float(h))
+		w_ratio = float(float(width)/float(w))
+		if h_ratio <= 1 or w_ratio <= 1:
+			ratio = h_ratio
+			if h_ratio > w_ratio:
+				ratio = w_ratio
+			img = cv2.resize(img,(int(ratio*w),int(ratio*h)))
+		#======== Paste image to background =======
+		im = Image.fromarray(np.uint8(img))
+		x, y = im.size
+		new_im = Image.new('RGBA', (width, height), fill_color)
+		new_im.paste(im, ((width - x) / 2, (height - y) / 2))
+		return np.asarray(new_im)
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_m = 10e5
