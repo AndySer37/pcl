@@ -70,8 +70,8 @@ class pcl2img():
 				plane_yz.append([tf_points.poses[j].position.y, tf_points.poses[j].position.z])
 				plane_xz.append([tf_points.poses[j].position.x, tf_points.poses[j].position.z])
 			self.toIMG(pcl_size, plane_xy, 'xy')
-			#self.toIMG(pcl_size, plane_yz, 'yz')
-			#self.toIMG(pcl_size, plane_xz, 'xz')
+			self.toIMG(pcl_size, plane_yz, 'yz')
+			self.toIMG(pcl_size, plane_xz, 'xz')
 			#cv2.imwrite( "Image.jpg", self.image)
 			cv2.imwrite( "pcl/Image" + str(self.index) + ".jpg", self.image)
 			self.index = self.index + 1
@@ -79,12 +79,14 @@ class pcl2img():
 		rospy.sleep(0.6)
 
 	def get_roi_image(self, ros_img):
+		print ros_img.encoding
+		print ros_img.height, ros_img.width
 		if ros_img != None:
 			try:
 				cv_image = self.bridge.imgmsg_to_cv2(ros_img, "bgr8")
+				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", cv_image)
 			except CvBridgeError as e:
 				print (e)
-			cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", cv_image)
 		else:
 			print "Please don't print this"
 
