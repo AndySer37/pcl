@@ -19,10 +19,9 @@ from PIL import Image
 
 class pcl2img():
 	def __init__(self):
-		self.my_path = "/home/arg_ws3/david_trainings/images/totem/black/"
 		self.node_name = rospy.get_name()
 		rospy.loginfo("[%s] Initializing " %(self.node_name))
-		rospy.Subscriber('/obj_list/roi', ObjectPoseList, self.call_back)
+		rospy.Subscriber('/obj_list/roi', ObjectPoseList, self.call_back, queue_size=1)
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
 		self.bridge = CvBridge()
 		self.boundary = 50
@@ -31,14 +30,17 @@ class pcl2img():
 		self.point_size = 4	# must be integer
 		self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 		self.index = 0
+		self.no_camera_img = False
 
 	def call_back(self, msg):
+		print "recieve msg"
 		obj_list = ObjectPoseList()
 		obj_list = msg
 		cluster_num = obj_list.size
 		#cluster_num = len(tf_points.list)
 		#pcl_size = len(msg.poses)
 		for i in range(cluster_num):
+			self.no_camera_img = False
 			self.get_roi_image(obj_list.list[i].img)
 			tf_points = PoseArray()
 			tf_points = obj_list.list[i].pcl_points
@@ -75,10 +77,17 @@ class pcl2img():
 			self.toIMG(pcl_size, plane_yz, 'yz')
 			self.toIMG(pcl_size, plane_xz, 'xz')
 			#cv2.imwrite( "Image.jpg", self.image)
-			cv2.imwrite( "pcl/Image" + str(self.index) + ".jpg", self.image)
-			self.index = self.index + 1
-			print "Save image"
-		rospy.sleep(0.6)
+			if not self.no_camera_img:
+				cv2.imwrite( "pcl/Image" + str(self.index) + ".jpg", self.image)
+				self.index = self.index + 1
+				print "Save image"
+		rospy.sleep(0.3)
+
+	def create_black_img(self):
+		self.no_camera_img = True
+		print "Skip"
+		#black_img = np.zeros((self.height, self.width, 3), np.uint8)
+		#cv2.imwrite( "black/roi/Image" + str(self.index) + ".jpg", black_img)
 
 	def get_roi_image(self, ros_img):
 		if ros_img != None and ros_img.height != 0 and ros_img.width!=0:
@@ -88,23 +97,22 @@ class pcl2img():
 				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", img)
 			except CvBridgeError as e:
 				print (e)
-				black_img = np.zeros((self.height, self.width, 3), np.uint8)
-				cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", black_img)
+				print ("CvBridge Error!!!")
+				self.create_black_img()
 		else:
 			print "No camera image, fill with black image!!!"
-			black_img = np.zeros((self.height, self.width, 3), np.uint8)
-			cv2.imwrite( "roi/Image" + str(self.index) + ".jpg", black_img)
+			self.create_black_img()
 
 	def resize_keep_ratio(self, img, width, height, fill_color=(0, 0, 0, 0)):
 		#======= Make sure image is smaller than background =======
 		h, w, channel = img.shape
 		h_ratio = float(float(height)/float(h))
 		w_ratio = float(float(width)/float(w))
-		if h_ratio <= 1 or w_ratio <= 1:
-			ratio = h_ratio
-			if h_ratio > w_ratio:
-				ratio = w_ratio
-			img = cv2.resize(img,(int(ratio*w),int(ratio*h)))
+		#if h_ratio <= 1 or w_ratio <= 1:
+		ratio = h_ratio
+		if h_ratio > w_ratio:
+			ratio = w_ratio
+		img = cv2.resize(img,(int(ratio*w),int(ratio*h)))
 		#======== Paste image to background =======
 		im = Image.fromarray(np.uint8(img))
 		x, y = im.size
@@ -163,6 +171,6 @@ class pcl2img():
 		#cv2.imwrite( "Image_" + plane + ".jpg", img )
 
 if __name__ == '__main__':
-	rospy.init_node('pcl2img')
+	rospy.init_node('img_6_channels')
 	foo = pcl2img()
 	rospy.spin()
