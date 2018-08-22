@@ -88,7 +88,7 @@ class classify_pcl():
 			tf_points = PoseArray()
 			tf_points = obj_list.list[i].pcl_points
 			centroids = Point()
-			centroids = obj_list.list[i].centroid
+			centroids = obj_list.list[i].position
 			plane_xy = []
 			plane_yz = []
 			plane_xz = []

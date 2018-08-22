@@ -45,7 +45,7 @@ class pcl2img():
 			tf_points = PoseArray()
 			tf_points = obj_list.list[i].pcl_points
 			centroids = Point()
-			centroids = obj_list.list[i].centroid
+			centroids = obj_list.list[i].position
 			self.image = np.zeros((int(self.height), int(self.width), 3), np.uint8)
 			plane_xy = []
 			plane_yz = []

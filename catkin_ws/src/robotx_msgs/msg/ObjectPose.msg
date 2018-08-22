@@ -9,4 +9,3 @@ string type
 sensor_msgs/PointCloud2 cloud
 sensor_msgs/Image img
 geometry_msgs/PoseArray pcl_points
-geometry_msgs/Point centroid
