@@ -9,10 +9,10 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import numpy as np
 
-class mapping():
+class mapping_pcl():
 	def __init__(self): 
 		# ======== Subscriber ========
-		rospy.Subscriber("/obj_list/odom", ObjectPoseList, self.call_back, queue_size=1)
+		rospy.Subscriber("/obj_list", ObjectPoseList, self.call_back, queue_size=1)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
 
 		# ======== Publisher ========
@@ -24,6 +24,7 @@ class mapping():
 		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
+		self.old_obj_list = None
 		self.first = True
 		self.robot_pose = None
 		self.map = ObjectPoseList()
@@ -32,7 +33,7 @@ class mapping():
 		self.matching = []
 		self.remove_list = []
 		self.remove_threshold = 0.05
-		self.r_threshold = 5
+		self.r_threshold = 10
 		self.prob_threshold = 0.3
 		self.update_range = 40.
 		self.punish_range = 20.
@@ -42,8 +43,8 @@ class mapping():
 		self.punish_no_detect = 2
 		self.punish_unclassify = 1.5
 		self.measurement_var = 1.
-		self.init_varX = 1.
-		self.init_varY = 1.
+		self.init_varX = 2.
+		self.init_varY = 2.
 		self.kernel = scipy.stats.norm(loc = 0, scale = 0.5)
 		# ======== Get from odometry =======
 		#self.pos_covariance = np.diag([3., 3.])
@@ -63,19 +64,22 @@ class mapping():
 		robot_z = self.obj_list.robot.position.z
 		self.robot_pose = [robot_x, robot_y, robot_z]
 		self.obj_list.header.frame_id = self.frame_id
+		# First obj_list recieved
 		if self.first:
 			self.map = self.obj_list
 			self.first = False
 			for i in range(self.map.size):
 				self.map.list[i].occupy = False
-				#self.map.list[i].varianceX = self.init_varX
-				#self.map.list[i].varianceY = self.init_varY
+				self.map.list[i].varianceX = self.init_varX
+				self.map.list[i].varianceY = self.init_varY
 		else:
 			for i in range(self.map.size):
 				self.map.list[i].occupy = False
 			self.data_associate()
-			self.update_map()
-			for i in range(self.map.size):
+			self.estimate_transform()
+			self.map = self.obj_list
+			#self.update_map()
+			'''for i in range(self.map.size):
 				mean_x, mean_y = self.map.list[i].position.x, self.map.list[i].position.y
 				var_x, var_y = self.map.list[i].varianceX, self.map.list[i].varianceY
 				prob_x = scipy.stats.norm(mean_x, var_x).pdf(mean_x)
@@ -95,21 +99,9 @@ class mapping():
 		self.map.header.stamp = rospy.Time.now()
 		self.map_confidence.header.stamp = rospy.Time.now()
 		self.pub_obj.publish(self.map)
-		self.drawRviz(self.map_confidence)
+		self.drawRviz(self.map_confidence)'''
 
 	def data_associate(self):
-		'''self.matching = [None]*self.obj_list.size
-		for i in range(self.map.size):
-			min_dis = 10e5
-			index = None
-			for j in range(self.obj_list.size):
-				dis = self.distance(self.map.list[i], self.obj_list.list[j])
-				if dis < min_dis:
-					index = j
-					min_dis = dis
-			if min_dis < self.r_threshold:
-				self.matching[index] = i
-		print self.matching'''
 		for i in range(self.obj_list.size):
 			min_dis = 10e5
 			index = None
@@ -125,6 +117,73 @@ class mapping():
 			else:
 				index = None
 			self.matching.append(index)
+
+	def compute_center(self):
+		sum_obj_x = 0.
+		sum_obj_y = 0.
+		sum_map_x = 0.
+		sum_map_y = 0.
+		for i in range(len(self.matching)):
+			if self.matching[i] != None:
+				map_index = self.matching[i]
+				sum_obj_x = sum_obj_x + self.obj_list.list[i].position.x
+				sum_obj_y = sum_obj_y + self.obj_list.list[i].position.y
+				sum_map_x = sum_map_x + self.map.list[map_index].position.x
+				sum_map_y = sum_map_y + self.map.list[map_index].position.y
+		avg_obj_x = sum_obj_x/len(self.matching)
+		avg_obj_y = sum_obj_y/len(self.matching)
+		avg_map_x = sum_map_x/len(self.matching)
+		avg_map_y = sum_map_y/len(self.matching)
+		return avg_obj_x, avg_obj_y, avg_map_x, avg_map_y
+
+	def estimate_transform(self):
+		obj_cx, obj_cy, map_cx, map_cy = self.compute_center()
+		obj_list = []
+		map_list = []
+		matching_num = 0
+		cs = 0.
+		ss = 0.
+		rr = 0.
+		ll = 0.
+		rx_sum = 0.
+		ry_sum = 0.
+		lx_sum = 0.
+		ly_sum = 0.
+		# ========== Similarity Transform ==========
+		for i in range(len(self.matching)):
+			if self.matching[i] != None:
+				matching_num = matching_num + 1
+				map_index = self.matching[i]
+				obj_ = [self.obj_list.list[i].position.x-obj_cx, self.obj_list.list[i].position.y-obj_cy]
+				map_ = [self.map.list[map_index].position.x-map_cx, self.map.list[map_index].position.y-map_cy]
+				obj_list.append(obj_)
+				map_list.append(map_)
+				cs = cs + (obj_[0]*map_[0] + obj_[1]*map_[1])
+				ss = ss + (-obj_[0]*map_[1] + obj_[1]*map_[0])
+				rr = rr + (obj_[0]*obj_[0] + obj_[1]*obj_[1])
+				ll = ll + (map_[0]*map_[0] + map_[1]*map_[1])
+				rx_sum = rx_sum + self.obj_list.list[i].position.x
+				ry_sum = ry_sum + self.obj_list.list[i].position.y
+				lx_sum = lx_sum + self.map.list[map_index].position.x
+				ly_sum = ly_sum + self.map.list[map_index].position.y
+		print self.matching
+		if matching_num >= 2:
+			rx_ = rx_sum/float(matching_num)
+			ry_ = ry_sum/float(matching_num)
+			lx_ = lx_sum/float(matching_num)
+			ly_ = ly_sum/float(matching_num)
+			#print rx_, ry_, lx_, ly_
+			lamda = math.sqrt(rr/ll)
+			#print lamda
+			c = cs / math.sqrt(cs**2 + ss**2)
+			s = ss / math.sqrt(cs**2 + ss**2)
+			txty = np.array([rx_, ry_]) - lamda*(np.array([[c,-s],[s, c]]).dot(np.array([lx_,ly_])))
+			tx = txty[0]
+			ty = txty[1]
+			rotation = (np.arcsin(s)/np.pi)*180
+			translation = [tx, ty]
+			print rotation, txty
+			#return rotation, translation
 
 	def update_map(self):
 		for i in range(self.obj_list.size):
@@ -263,9 +322,9 @@ class mapping():
 		self.pub_marker.publish(marker_array)
 
 if __name__ == "__main__":
-	rospy.init_node('mapping')
+	rospy.init_node('mapping_pcl')
 	# Tell ROS that we're making a new node.
-	rospy.init_node("mapping",anonymous=False)
+	rospy.init_node("mapping_pcl",anonymous=False)
 	rospy.loginfo("Start Mapping")
-	foo = mapping()
+	foo = mapping_pcl()
 rospy.spin()
