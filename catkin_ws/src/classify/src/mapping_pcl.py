@@ -6,7 +6,8 @@ import scipy.stats
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, PoseStamped
+from nav_msgs.msg import Path
 import numpy as np
 
 class mapping_pcl():
@@ -18,15 +19,18 @@ class mapping_pcl():
 		# ======== Publisher ========
 		self.pub_obj = rospy.Publisher("/obj_list/map", ObjectPoseList, queue_size=1)
 		self.pub_marker = rospy.Publisher("/obj_marker/map", MarkerArray, queue_size = 1)
+		self.pub_path = rospy.Publisher("/slam/path", Path, queue_size = 1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Get ROS parameter ========
 		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
+		self.path = Path()
 		self.old_obj_list = None
 		self.first = True
-		self.robot_pose = None
+		self.old_pos = [0, 0, 0]
+		self.new_pos = [0, 0, 0]
 		self.map = ObjectPoseList()
 		self.obj_list = None
 		self.frame_id = "odom"
@@ -59,20 +63,19 @@ class mapping_pcl():
 		self.map.header.frame_id = self.frame_id
 		self.matching = []
 		self.remove_list = []
-		robot_x = self.obj_list.robot.position.x
-		robot_y = self.obj_list.robot.position.y
-		robot_z = self.obj_list.robot.position.z
-		self.robot_pose = [robot_x, robot_y, robot_z]
 		self.obj_list.header.frame_id = self.frame_id
 		# First obj_list recieved
 		if self.first:
-			self.map = self.obj_list
 			self.first = False
+			self.map = self.obj_list
+			self.old_pos = [0, 0, 0]
+			self.new_pos = [0, 0, 0]
 			for i in range(self.map.size):
 				self.map.list[i].occupy = False
 				self.map.list[i].varianceX = self.init_varX
 				self.map.list[i].varianceY = self.init_varY
 		else:
+			self.old_pos = self.new_pos
 			for i in range(self.map.size):
 				self.map.list[i].occupy = False
 			self.data_associate()
@@ -166,7 +169,6 @@ class mapping_pcl():
 				ry_sum = ry_sum + self.obj_list.list[i].position.y
 				lx_sum = lx_sum + self.map.list[map_index].position.x
 				ly_sum = ly_sum + self.map.list[map_index].position.y
-		print self.matching
 		if matching_num >= 2:
 			rx_ = rx_sum/float(matching_num)
 			ry_ = ry_sum/float(matching_num)
@@ -180,10 +182,30 @@ class mapping_pcl():
 			txty = np.array([rx_, ry_]) - lamda*(np.array([[c,-s],[s, c]]).dot(np.array([lx_,ly_])))
 			tx = txty[0]
 			ty = txty[1]
-			rotation = (np.arcsin(s)/np.pi)*180
 			translation = [tx, ty]
-			print rotation, txty
+			rotation = (np.arcsin(s)/np.pi)*180
+			print txty, rotation
+			txty_, rotation_ = self.lidar2robot(txty, rotation)
+			print txty_, rotation_
+			print "==============="
+			c_ = c
+			s_ = s
+			rot_mat = np.array([[c_, -s_],[s_, c_]])
+			pre_pos = np.array(self.old_pos[:2])
+			tran_mat = np.array(txty_)
+			self.new_pos[:2] = lamda * rot_mat.dot(pre_pos) + tran_mat
+			self.drawPath()
 			#return rotation, translation
+
+	def lidar2robot(self, tran, rot):
+		'''position = [0, 0, 0]
+		rad = math.atan2(tf_points.centroids[i].y, tf_points.centroids[i].x)
+		quaternion = tf.transformations.quaternion_from_euler(0., 0., -rad)
+		transformer = tf.TransformerROS()
+		transpose_matrix = transformer.fromTranslationRotation(position, quaternion)'''
+		new_tran = [-tran[1], tran[0]]
+		new_rot = rot
+		return new_tran, new_rot
 
 	def update_map(self):
 		for i in range(self.obj_list.size):
@@ -263,7 +285,16 @@ class mapping_pcl():
 		return math.sqrt((a.position.x-b.position.x)**2 + (a.position.y-b.position.y)**2 + (a.position.z-b.position.z)**2)
 
 	def distance_to_robot(self, p): # caculate distance between two 3d points
-		return math.sqrt((p.position.x - self.robot_pose[0])**2 + (p.position.y - self.robot_pose[1])**2 + (p.position.z - self.robot_pose[2])**2)
+		return math.sqrt((p.position.x - self.new_pos[0])**2 + (p.position.y - self.new_pos[1])**2 + (p.position.z - self.new_pos[2])**2)
+
+	def drawPath(self):
+		p = PoseStamped()
+		#p.header = self.obj_list.header
+		p.pose.position.x = self.new_pos[0]
+		p.pose.position.y = self.new_pos[1]
+		self.path.poses.append(p)
+		self.path.header = self.obj_list.header
+		self.pub_path.publish(self.path)
 
 	def drawRviz(self, obj_list):
 		marker_array = MarkerArray()
