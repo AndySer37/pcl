@@ -26,7 +26,6 @@ class mapping_pcl():
 		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
-		self.angle = 0
 		self.cosine = None
 		self.sine = None
 		self.path = Path()
@@ -174,8 +173,7 @@ class mapping_pcl():
 			ty = txty[1]
 			translation = [tx, ty]
 			angle = (np.arcsin(s)/np.pi)*180
-			self.angle = self.angle + angle
-			#print self.angle
+			print angle
 			txty_, c_, s_ = self.lidar2robot(txty, c, s, [map_cx, map_cy])
 			#print "==============="
 			rot_mat = np.array([[c_, -s_], [s_, c_]])
