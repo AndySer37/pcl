@@ -26,6 +26,9 @@ class mapping_pcl():
 		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
+		self.angle = 0
+		self.cosine = None
+		self.sine = None
 		self.path = Path()
 		self.old_obj_list = None
 		self.first = True
@@ -55,7 +58,7 @@ class mapping_pcl():
 		self.sensor_error = 1.
 
 	def call_back(self, msg):
-		rospy.loginfo("Process Object List")
+		#rospy.loginfo("Process Object List")
 		self.obj_list = ObjectPoseList()
 		self.obj_list = msg
 		self.map_confidence = ObjectPoseList()
@@ -148,10 +151,6 @@ class mapping_pcl():
 		ss = 0.
 		rr = 0.
 		ll = 0.
-		rx_sum = 0.
-		ry_sum = 0.
-		lx_sum = 0.
-		ly_sum = 0.
 		# ========== Similarity Transform ==========
 		for i in range(len(self.matching)):
 			if self.matching[i] != None:
@@ -165,47 +164,53 @@ class mapping_pcl():
 				ss = ss + (-obj_[0]*map_[1] + obj_[1]*map_[0])
 				rr = rr + (obj_[0]*obj_[0] + obj_[1]*obj_[1])
 				ll = ll + (map_[0]*map_[0] + map_[1]*map_[1])
-				rx_sum = rx_sum + self.obj_list.list[i].position.x
-				ry_sum = ry_sum + self.obj_list.list[i].position.y
-				lx_sum = lx_sum + self.map.list[map_index].position.x
-				ly_sum = ly_sum + self.map.list[map_index].position.y
-		if matching_num >= 2:
-			rx_ = rx_sum/float(matching_num)
-			ry_ = ry_sum/float(matching_num)
-			lx_ = lx_sum/float(matching_num)
-			ly_ = ly_sum/float(matching_num)
-			#print rx_, ry_, lx_, ly_
+		if matching_num >= 2: # We need four position(2 pairs) to get the unique solution
 			lamda = math.sqrt(rr/ll)
 			#print lamda
 			c = cs / math.sqrt(cs**2 + ss**2)
 			s = ss / math.sqrt(cs**2 + ss**2)
-			txty = np.array([rx_, ry_]) - lamda*(np.array([[c,-s],[s, c]]).dot(np.array([lx_,ly_])))
+			txty = np.array([obj_cx, obj_cy]) - lamda*(np.array([[c,-s],[s, c]]).dot(np.array([map_cx, map_cy])))
 			tx = txty[0]
 			ty = txty[1]
 			translation = [tx, ty]
-			rotation = (np.arcsin(s)/np.pi)*180
-			print txty, rotation
-			txty_, rotation_ = self.lidar2robot(txty, rotation)
-			print txty_, rotation_
-			print "==============="
-			c_ = c
-			s_ = s
-			rot_mat = np.array([[c_, -s_],[s_, c_]])
-			pre_pos = np.array(self.old_pos[:2])
+			angle = (np.arcsin(s)/np.pi)*180
+			self.angle = self.angle + angle
+			#print self.angle
+			txty_, c_, s_ = self.lidar2robot(txty, c, s, [map_cx, map_cy])
+			#print "==============="
+			rot_mat = np.array([[c_, -s_], [s_, c_]])
+			pre_pos = np.array([map_cx, map_cy])
 			tran_mat = np.array(txty_)
-			self.new_pos[:2] = lamda * rot_mat.dot(pre_pos) + tran_mat
+			new_pos_wo_rot = lamda * rot_mat.dot([0, 0]) + tran_mat
+			new_pos = new_pos_wo_rot
+			new_pos = lamda * rot_mat.dot(new_pos_wo_rot)
+			self.new_pos[:2] = [self.old_pos[0] + new_pos[0], self.old_pos[1] + new_pos[1]]
 			self.drawPath()
 			#return rotation, translation
+		else:
+			rospy.info("FUCK")
 
-	def lidar2robot(self, tran, rot):
+	def lidar2robot(self, tran, c, s, map_c):
 		'''position = [0, 0, 0]
 		rad = math.atan2(tf_points.centroids[i].y, tf_points.centroids[i].x)
 		quaternion = tf.transformations.quaternion_from_euler(0., 0., -rad)
 		transformer = tf.TransformerROS()
 		transpose_matrix = transformer.fromTranslationRotation(position, quaternion)'''
-		new_tran = [-tran[1], tran[0]]
-		new_rot = rot
-		return new_tran, new_rot
+		#================================
+		#for self revolve problem
+		self_revolve_pos = np.array([[c, -s], [s, c]]).dot(map_c)
+		new_tran = [-(tran[1]), tran[0]]
+		#cos(x) =  cos(-x)
+		#sin(x) = -sin(-x)
+		if self.sine == None or self.cosine == None:
+			self.sine = s
+			self.cosine = c
+		else:
+			self.sine = self.sine*c + self.cosine*s
+			self.cosine = self.cosine*c - self.sine*s
+		c_ = self.cosine
+		s_ = -self.sine
+		return new_tran, c_, s_
 
 	def update_map(self):
 		for i in range(self.obj_list.size):
