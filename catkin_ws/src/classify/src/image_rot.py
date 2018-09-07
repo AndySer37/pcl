@@ -20,7 +20,7 @@ class pcl2img():
 	def __init__(self):
 		self.node_name = rospy.get_name()
 		rospy.loginfo("[%s] Initializing " %(self.node_name))
-		rospy.Subscriber('/pcl_points', PCL_points, self.call_back)
+		rospy.Subscriber('/pcl_points', PCL_points, self.call_back, queue_size = 1, buff_size = 2**24)
 		self.pub_obj = rospy.Publisher("obj_list", ObjectPoseList, queue_size = 1)
 		self.pub_marker = rospy.Publisher("/obj_classify", MarkerArray, queue_size = 1)
 		#rospy.Subscriber('/pcl_array', PoseArray, self.call_back)
@@ -64,13 +64,13 @@ class pcl2img():
 				plane_yz.append([tf_points.list[i].poses[j].position.y, tf_points.list[i].poses[j].position.z])
 				plane_xz.append([tf_points.list[i].poses[j].position.x, tf_points.list[i].poses[j].position.z])
 			self.toIMG(pcl_size, plane_xy, 'xy')
-			#self.toIMG(pcl_size, plane_yz, 'yz')
-			#self.toIMG(pcl_size, plane_xz, 'xz')
+			self.toIMG(pcl_size, plane_yz, 'yz')
+			self.toIMG(pcl_size, plane_xz, 'xz')
 			#cv2.imwrite( "Image.jpg", self.image)
-			cv2.imwrite( "Image" + str(self.index) + ".jpg", self.image)
+			cv2.imwrite( "Image_r_" + str(self.index) + ".jpg", self.image)
 			self.index = self.index + 1
 			print "Save image"
-		rospy.sleep(0.6)
+		rospy.sleep(0.8)
 
 	def toIMG(self, pcl_size, pcl_array, plane):
 		min_m = 10e5

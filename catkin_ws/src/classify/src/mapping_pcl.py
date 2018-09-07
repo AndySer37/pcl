@@ -2,6 +2,7 @@
 import rospy
 import roslib
 import math
+import tf
 import scipy.stats
 from sensor_msgs.msg import PointCloud2
 from robotx_msgs.msg import ObjectPose, ObjectPoseList
@@ -12,6 +13,7 @@ import numpy as np
 
 class mapping_pcl():
 	def __init__(self): 
+		self.br = tf.TransformBroadcaster()
 		# ======== Subscriber ========
 		rospy.Subscriber("/obj_list", ObjectPoseList, self.call_back, queue_size=1)
 		#rospy.Subscriber("/waypointList", WaypointList, call_back, queue_size=10)
@@ -20,12 +22,15 @@ class mapping_pcl():
 		self.pub_obj = rospy.Publisher("/obj_list/map", ObjectPoseList, queue_size=1)
 		self.pub_marker = rospy.Publisher("/obj_marker/map", MarkerArray, queue_size = 1)
 		self.pub_path = rospy.Publisher("/slam/path", Path, queue_size = 1)
+		self.pub_pose = rospy.Publisher("/slam/pose", PoseStamped, queue_size=1)
 		#pub_rviz = rospy.Publisher("/wp_path", Marker, queue_size = 1)
 
 		# ======== Get ROS parameter ========
 		self.visual = rospy.get_param('~visual', False)
 
 		# ======== Declare Variable ========
+		self.radius = 0
+		self.lidar_pose = PoseStamped()
 		self.cosine = None
 		self.sine = None
 		self.path = Path()
@@ -83,6 +88,11 @@ class mapping_pcl():
 			self.data_associate()
 			self.estimate_transform()
 			self.map = self.obj_list
+			self.br.sendTransform((self.lidar_pose.pose.position.x, \
+				self.lidar_pose.pose.position.y, self.lidar_pose.pose.position.z), \
+				(self.lidar_pose.pose.orientation.x, self.lidar_pose.pose.orientation.y, \
+				self.lidar_pose.pose.orientation.z, self.lidar_pose.pose.orientation.w), \
+				self.obj_list.header.stamp,"/velodyne","/odom")
 			#self.update_map()
 			'''for i in range(self.map.size):
 				mean_x, mean_y = self.map.list[i].position.x, self.map.list[i].position.y
@@ -172,21 +182,27 @@ class mapping_pcl():
 			tx = txty[0]
 			ty = txty[1]
 			translation = [tx, ty]
-			angle = (np.arcsin(s)/np.pi)*180
-			print angle
 			txty_, c_, s_ = self.lidar2robot(txty, c, s, [map_cx, map_cy])
+			quaternion = tf.transformations.quaternion_from_euler(0, 0, -self.radius)
 			#print "==============="
 			rot_mat = np.array([[c_, -s_], [s_, c_]])
 			pre_pos = np.array([map_cx, map_cy])
-			tran_mat = np.array(txty_)
-			new_pos_wo_rot = lamda * rot_mat.dot([0, 0]) + tran_mat
-			new_pos = new_pos_wo_rot
+			new_pos_wo_rot = np.array(txty_)
 			new_pos = lamda * rot_mat.dot(new_pos_wo_rot)
 			self.new_pos[:2] = [self.old_pos[0] + new_pos[0], self.old_pos[1] + new_pos[1]]
+			self.lidar_pose.pose.position.x = self.new_pos[0]
+			self.lidar_pose.pose.position.y = self.new_pos[1]
+			self.lidar_pose.pose.position.z = 0
+			self.lidar_pose.pose.orientation.x = quaternion[0]
+			self.lidar_pose.pose.orientation.y = quaternion[1]
+			self.lidar_pose.pose.orientation.z = quaternion[2]
+			self.lidar_pose.pose.orientation.w = quaternion[3]
+			self.lidar_pose.header = self.obj_list.header
+			self.pub_pose.publish(self.lidar_pose)
 			self.drawPath()
 			#return rotation, translation
 		else:
-			rospy.info("FUCK")
+			rospy.loginfo("FUCK")
 
 	def lidar2robot(self, tran, c, s, map_c):
 		'''position = [0, 0, 0]
@@ -197,17 +213,20 @@ class mapping_pcl():
 		#================================
 		#for self revolve problem
 		self_revolve_pos = np.array([[c, -s], [s, c]]).dot(map_c)
-		new_tran = [-(tran[1]), tran[0]]
+		new_tran = [-tran[0], -tran[1]]
 		#cos(x) =  cos(-x)
 		#sin(x) = -sin(-x)
-		if self.sine == None or self.cosine == None:
+		'''if self.sine == None or self.cosine == None:
 			self.sine = s
 			self.cosine = c
 		else:
 			self.sine = self.sine*c + self.cosine*s
 			self.cosine = self.cosine*c - self.sine*s
 		c_ = self.cosine
-		s_ = -self.sine
+		s_ = -self.sine'''
+		self.radius = (self.radius + np.arcsin(s)) % (2.*np.pi)
+		s_ = np.sin(-self.radius)
+		c_ = np.cos(-self.radius)
 		return new_tran, c_, s_
 
 	def update_map(self):
@@ -295,6 +314,7 @@ class mapping_pcl():
 		#p.header = self.obj_list.header
 		p.pose.position.x = self.new_pos[0]
 		p.pose.position.y = self.new_pos[1]
+		p.pose.position.z = 0
 		self.path.poses.append(p)
 		self.path.header = self.obj_list.header
 		self.pub_path.publish(self.path)
