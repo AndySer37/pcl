@@ -282,14 +282,14 @@ class classify_pcl():
 				marker.color.b = 1
 				marker.color.a = 0.5
 			elif obj_list.list[i].type == "totem_red":
-				marker.color.r = 0
-				marker.color.g = 1
+				marker.color.r = 1
+				marker.color.g = 0
 				marker.color.b = 0
 				marker.color.a = 0.5
 			elif obj_list.list[i].type == "totem_green":
 				marker.color.r = 0
 				marker.color.g = 1
-				marker.color.b = 1
+				marker.color.b = 0
 				marker.color.a = 0.5
 			elif obj_list.list[i].type == "dock":
 				marker.color.r = 1
@@ -300,7 +300,7 @@ class classify_pcl():
 				marker.scale.y = 6
 				marker.scale.z = 1
 			else:
-				marker.color.r = 1
+				marker.color.r = 0
 				marker.color.g = 0
 				marker.color.b = 0
 				marker.color.a = 0.5
