@@ -1,0 +1,11 @@
+Header header
+geometry_msgs/Point position
+geometry_msgs/Quaternion orientation
+float64 varianceX
+float64 varianceY
+int32 matching_index
+bool occupy
+string type
+sensor_msgs/PointCloud2 cloud
+sensor_msgs/Image img
+geometry_msgs/PoseArray pcl_points
