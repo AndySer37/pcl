@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<launch>
+  <node pkg="pcl_exercise" type="depth_to_point" name="depth_to_point" output="screen">
+  	<remap from="depth_image" to="/camera/aligned_depth_to_color/image_raw"/>
+  </node>
+
+</launch>
