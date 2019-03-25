@@ -59,7 +59,7 @@ void depth_to_point::callback_save(const sensor_msgs::ImageConstPtr& image, cons
 	cv_bridge::CvImagePtr img_ptr_depth = cv_bridge::toCvCopy(depth_image, sensor_msgs::image_encodings::TYPE_16UC1);
 	cv_bridge::CvImagePtr img_ptr_img = cv_bridge::toCvCopy(image, sensor_msgs::image_encodings::RGB8);
 
-	if (count % 37 == 0){
+	if (count % 30 == 0){
 		//imwrite("/home/andyser/data/1.png", img_ptr_img->image);
 		stringstream ss;
 		ss << img_num;
@@ -115,9 +115,8 @@ void depth_to_point::callback_sync(const sensor_msgs::ImageConstPtr& image, cons
 	return;
 }
 depth_to_point::depth_to_point(){
-	obj = "extinguisher/";
-
-	scene = "scene000063/";
+	obj = "drill/";
+	scene = "scene000042/";
 
 	count = 0;
 	img_num = 0;

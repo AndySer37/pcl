@@ -1,4 +1,6 @@
 *~
+build/
+devel/
 *.jpg
 *.pcd
 *.bag

@@ -1,8 +1,0 @@
-prefix=/home/andyser/code/subt_related/pcl/catkin_ws/devel
-
-Name: pcl_exercise
-Description: Description of pcl_exercise
-Version: 0.0.0
-Cflags: 
-Libs: -L/home/andyser/code/subt_related/pcl/catkin_ws/devel/lib 
-Requires: message_runtime

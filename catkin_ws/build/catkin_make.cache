@@ -1,2 +1,0 @@
-pcl_exercise:realsense/ddynamic_reconfigure:realsense/realsense2_camera
--DCATKIN_DEVEL_PREFIX=/home/andyser/code/subt_related/pcl/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/home/andyser/code/subt_related/pcl/catkin_ws/install -G Unix Makefiles

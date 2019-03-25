@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(pcl_exercise)
+project(control)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -10,14 +10,14 @@ project(pcl_exercise)
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   geometry_msgs
+  nav_msgs
   pcl_conversions
   pcl_ros
   roscpp
   rospy
   sensor_msgs
+  dynamic_reconfigure
   std_msgs
-  message_generation
-  ddynamic_reconfigure  # realsense2
 )
 
 ## System dependencies are found with CMake's conventions
@@ -77,7 +77,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   geometry_msgs#   sensor_msgs#   std_msgs
+#   geometry_msgs#   nav_msgs#   sensor_msgs#   std_msgs
 # )
 
 ################################################
@@ -95,10 +95,13 @@ find_package(catkin REQUIRED COMPONENTS
 ##     and list every .cfg file to be processed
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
+generate_dynamic_reconfigure_options(
+    cfg/pos_PID.cfg
+    cfg/ang_PID.cfg
+    cfg/lookahead.cfg
 #   cfg/DynReconf1.cfg
 #   cfg/DynReconf2.cfg
-# )
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -110,10 +113,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  CATKIN_DEPENDS message_runtime 
 #  INCLUDE_DIRS include
-#  LIBRARIES pcl_exercise
-#  CATKIN_DEPENDS cv_bridge geometry_msgs pcl_conversions pcl_ros roscpp rospy sensor_msgs std_msgs
+#  LIBRARIES control
+#  CATKIN_DEPENDS cv_bridge geometry_msgs nav_msgs pcl_conversions pcl_ros roscpp rospy sensor_msgs std_msgs
 #  DEPENDS system_lib
 )
 
@@ -130,7 +132,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/pcl_exercise.cpp
+#   src/${PROJECT_NAME}/control.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -141,7 +143,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/pcl_exercise_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/control_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -198,24 +200,10 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_pcl_exercise.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_control.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
-find_package(Eigen3 REQUIRED)
-include_directories(${EIGEN3_INCLUDE_DIRS})
-
-add_executable(test1 src/test1.cpp)
-target_link_libraries(test1 ${catkin_LIBRARIES})
-
-add_executable(depth_to_point  src/depth_to_point.h src/depth_to_point.cpp)
-target_link_libraries(depth_to_point ${catkin_LIBRARIES})
-
-add_executable(read_pc src/read_pc.cpp)
-target_link_libraries(read_pc ${catkin_LIBRARIES})
-
-add_executable(read_mask_to_pc src/read_mask_to_pc.cpp)
-target_link_libraries(read_mask_to_pc ${catkin_LIBRARIES})
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
