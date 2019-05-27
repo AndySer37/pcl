@@ -1,0 +1,4 @@
+<?xml version="1.0" ?>
+<launch>
+  <node pkg="pcl_exercise" type="test1" name="test1" output="screen"></node>
+</launch>

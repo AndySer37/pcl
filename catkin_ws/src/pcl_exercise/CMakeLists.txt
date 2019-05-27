@@ -205,8 +205,11 @@ include_directories(
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIRS})
 
-add_executable(test1 src/test1.cpp)
+add_executable(test1 src/test1.cpp src/normal.h)
 target_link_libraries(test1 ${catkin_LIBRARIES})
+
+add_executable(normal src/normal.cpp)
+target_link_libraries(normal ${catkin_LIBRARIES})
 
 add_executable(depth_to_point  src/depth_to_point.h src/depth_to_point.cpp)
 target_link_libraries(depth_to_point ${catkin_LIBRARIES})
@@ -216,6 +219,10 @@ target_link_libraries(read_pc ${catkin_LIBRARIES})
 
 add_executable(read_mask_to_pc src/read_mask_to_pc.cpp)
 target_link_libraries(read_mask_to_pc ${catkin_LIBRARIES})
+
+add_executable(save_rgb src/save_rgb.cpp)
+target_link_libraries(save_rgb ${catkin_LIBRARIES})
+
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
